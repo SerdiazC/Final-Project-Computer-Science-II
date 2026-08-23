@@ -1,4 +1,4 @@
-package Algorithms.Search;
+package Search;
 //import java.util.Scanner;
 
 public class Binary extends Compare{
