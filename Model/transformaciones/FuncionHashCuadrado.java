@@ -37,7 +37,7 @@ public class FuncionHashCuadrado implements FuncionHash {
         long cuadrado = (long) clave * clave;
         String cifrasCuadrado = Long.toString(cuadrado);
 
-        int digitosObjetivo = contarDigitos(tamanoEstructura);
+        int digitosObjetivo = contarCifrasBase(tamanoEstructura);
         int extraido;
 
         if (cifrasCuadrado.length() <= digitosObjetivo) {
@@ -75,7 +75,7 @@ public class FuncionHashCuadrado implements FuncionHash {
     public String describirCalculo(int clave, int tamanoEstructura) {
         long cuadrado = (long) clave * clave;
         String cifras = Long.toString(cuadrado);
-        int objetivo = contarDigitos(tamanoEstructura);
+        int objetivo = contarCifrasBase(tamanoEstructura);
 
         String extraidoTexto;
         if (cifras.length() <= objetivo) {

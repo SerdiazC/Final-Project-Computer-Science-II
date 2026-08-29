@@ -48,7 +48,7 @@ public class FuncionHashTruncamiento implements FuncionHash {
      */
     private int formarNumero(int clave, int tamanoEstructura) {
         String cifrasClave = Integer.toString(clave);
-        int posiciones = contarDigitos(tamanoEstructura);
+        int posiciones = contarCifrasBase(tamanoEstructura);
 
         if (cifrasClave.length() <= posiciones) {
             // No alcanzan posiciones: se usa la clave completa.
@@ -64,7 +64,7 @@ public class FuncionHashTruncamiento implements FuncionHash {
      */
     @Override
     public String describirCalculo(int clave, int tamanoEstructura) {
-        int posiciones = contarDigitos(tamanoEstructura);
+        int posiciones = contarCifrasBase(tamanoEstructura);
         int numeroFormado = formarNumero(clave, tamanoEstructura);
 
         String detalle;

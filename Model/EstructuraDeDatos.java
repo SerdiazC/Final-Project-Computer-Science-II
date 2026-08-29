@@ -1,7 +1,5 @@
 package Model;
 
-import java.util.Arrays;
-
 import Model.excepciones.ClaveDuplicadaException;
 import Model.excepciones.ClaveInvalidaException;
 import Model.excepciones.ClaveNoEncontradaException;
@@ -16,38 +14,36 @@ import Model.excepciones.ExcepcionEstructura;
  * ============================================================================
  *
  * Representa el "espacio" donde se almacenan las claves numéricas.
- * Reglas generales del proyecto que esta clase garantiza:
+ * Reglas generales del proyecto que toda estructura garantiza:
  *
- *  - Tamaño EXACTO elegido por el usuario, entre CAPACIDAD_MINIMA (1) y
- *    CAPACIDAD_MAXIMA (1000) espacios; todas las estructuras comparten la
- *    misma configuración.
- *  - La cantidad de dígitos de las claves se define al crearla
- *    (entre DIGITOS_MINIMOS y DIGITOS_MAXIMOS) y todas las claves deben
- *    respetarla exactamente.
- *  - Las claves son únicas: no se permiten duplicados.
- *  - Los espacios libres se marcan con el centinela CLAVE_VACIA (-1),
- *    de modo que tanto estructuras contiguas como dispersas compartan
- *    el mismo manejo de estado.
+ *  - Claves de dígitos EXACTOS definidos al crearla (entre DIGITOS_MINIMOS
+ *    y DIGITOS_MAXIMOS); los ceros a la izquierda no cuentan.
+ *  - Claves únicas: no se permiten duplicados.
+ *  - Las familias con espacio acotado usan un tamaño elegido por el
+ *    usuario entre CAPACIDAD_MINIMA (1) y CAPACIDAD_MAXIMA (1000); las
+ *    familias de crecimiento libre (árboles digitales) lo ignoran.
  *
  * JERARQUÍA (principio Open/Closed):
  *
- *   EstructuraDeDatos (esta clase: estado y reglas comunes)
- *    ├── EstructuraContigua  -> guarda los datos uno tras otro
- *    │     ├── EstructuraSecuencial (orden de llegada -> búsqueda lineal)
- *    │     └── EstructuraOrdenada   (ascendente permanente -> búsqueda binaria)
- *    └── EstructuraHash      -> guarda por dirección calculada con una
- *                               FuncionHash (transformación de claves)
+ *   EstructuraDeDatos (esta clase: configuración y reglas comunes)
+ *    ├── EstructuraContigua     -> datos uno tras otro en un arreglo
+ *    │     ├── EstructuraSecuencial     (orden de llegada -> LINEAL)
+ *    │     ├── EstructuraOrdenada       (ascendente -> BINARIA)
+ *    │     └── EstructuraHash           (dirección calculada -> MOD/CUADRADO/
+ *    │                                    TRUNCAMIENTO/PLEGAMIENTO)
+ *    └── EstructuraArbolDigital -> árbol binario guiado por los bits de la
+ *                                  clave (RESIDUOS DIGITAL)
  *
- * Agregar una estructura nueva solo exige crear otra subclase; nada del
- * código existente se modifica (Open/Closed) y toda subclase es
- * intercambiable donde se espere a esta base (sustitución de Liskov).
+ * Agregar una familia nueva solo exige otra subclase; nada del código
+ * existente se modifica (Open/Closed) y cualquier subclase sustituye a la
+ * base donde se espere (Liskov).
  */
 public abstract class EstructuraDeDatos {
 
-    /** Mínimo tamaño que puede tener una estructura. */
+    /** Mínimo tamaño que puede tener una estructura acotada. */
     public static final int CAPACIDAD_MINIMA = 1;
 
-    /** Máximo tamaño que puede tener cualquier estructura. */
+    /** Máximo tamaño que puede tener cualquier estructura acotada. */
     public static final int CAPACIDAD_MAXIMA = 1000;
 
     /** Mínima cantidad de dígitos que puede configurar el usuario. */
@@ -71,24 +67,30 @@ public abstract class EstructuraDeDatos {
     /** Identificador de la estructura de HASH TRUNCAMIENTO. */
     public static final String TIPO_HASH_TRUNCAMIENTO = "HASH TRUNCAMIENTO";
 
-    /** Centinela que marca un espacio libre dentro del arreglo. */
+    /** Identificador de la estructura de HASH PLEGAMIENTO. */
+    public static final String TIPO_HASH_PLEGAMIENTO = "HASH PLEGAMIENTO";
+
+    /** Identificador de la estructura de RESIDUOS DIGITAL (árbol). */
+    public static final String TIPO_RESIDUOS_DIGITAL = "RESIDUOS DIGITAL";
+
+    /** Centinela que marca un espacio/node sin clave asignada. */
     public static final int CLAVE_VACIA = -1;
 
     // ========================================================================
-    // ESTADO INTERNO
+    // ESTADO COMÚN
     // ========================================================================
-
-    /** Arreglo interno; las posiciones libres contienen CLAVE_VACIA. */
-    protected final int[] claves;
-
-    /** Cantidad real de claves almacenadas (espacios ocupados). */
-    protected int cantidad;
 
     /** Dígitos exactos que deben tener todas las claves (1..7). */
     private final int digitosClave;
 
-    /** Tamaño exacto de esta estructura elegido por el usuario (1..1000). */
+    /**
+     * Tamaño configurado para estructuras acotadas; las de crecimiento
+     * libre lo reciben como techo nominal pero nunca lo alcanzan.
+     */
     private final int capacidad;
+
+    /** Cantidad real de claves almacenadas actualmente. */
+    protected int cantidad;
 
     // ========================================================================
     // CONSTRUCCIÓN
@@ -98,7 +100,7 @@ public abstract class EstructuraDeDatos {
      * Crea la estructura validando toda su configuración inicial.
      *
      * @param digitosClave dígitos exactos que tendrán las claves (1..7).
-     * @param capacidad    tamaño exacto de la estructura (1..1000).
+     * @param capacidad    tamaño nominal de la estructura (1..1000).
      * @throws ExcepcionEstructura si algún parámetro queda fuera de rango.
      */
     protected EstructuraDeDatos(int digitosClave, int capacidad)
@@ -117,18 +119,15 @@ public abstract class EstructuraDeDatos {
         }
         this.digitosClave = digitosClave;
         this.capacidad = capacidad;
-        this.claves = new int[capacidad];
-        Arrays.fill(this.claves, CLAVE_VACIA);
         this.cantidad = 0;
     }
 
     // ========================================================================
-    // OPERACIONES PRINCIPALES (CADA SUBCLASE DEFINE SU FORMA DE GUARDAR)
+    // OPERACIONES PRINCIPALES (CADA FAMILIA DEFINE CÓMO GUARDAR Y HALLAR)
     // ========================================================================
 
     /**
-     * Inserta una clave en la estructura según la técnica propia de cada
-     * familia: contigua (junto a las demás) o dispersa (dirección hash).
+     * Inserta una clave aplicando la técnica propia de la familia.
      *
      * @param clave valor numérico a almacenar.
      * @throws ExcepcionEstructura si viola alguna regla de negocio.
@@ -136,14 +135,42 @@ public abstract class EstructuraDeDatos {
     public abstract void insertar(int clave) throws ExcepcionEstructura;
 
     /**
-     * Verifica SI LA CLAVE PODRÍA insertarse sin modificar nada. El gestor
-     * usa esta fase de "reserva" sobre TODAS las estructuras antes de
-     * aplicar cambios, garantizando que o se inserta en todas o en ninguna.
+     * Elimina la clave indicada.
+     *
+     * OJO: este recorrido interno es un detalle mecánico de la eliminación,
+     * NO sustituye las búsquedas pedagógicas del proyecto (esas viven en
+     * Model.busquedas con sus pasos visualizables).
+     *
+     * @param clave valor a eliminar.
+     * @throws EstructuraVaciaException   si no hay datos.
+     * @throws ClaveNoEncontradaException si la clave no existe.
+     */
+    public abstract void eliminar(int clave)
+            throws EstructuraVaciaException,
+            ClaveNoEncontradaException;
+
+    /**
+     * Indica si la clave ya fue almacenada (para rechazar duplicados).
+     *
+     * @param clave valor a verificar.
+     * @return true si ya existe dentro de la estructura.
+     */
+    public abstract boolean contieneClave(int clave);
+
+    /**
+     * @return copia densa de las claves ocupadas, en el orden interno
+     *         natural de la estructura (modificar el arreglo devuelto NO
+     *         afecta la estructura).
+     */
+    public abstract int[] obtenerClaves();
+
+    /**
+     * Verifica SI LA CLAVE PODRÍA insertarse sin modificar nada. La vista o
+     * el gestor pueden usarla como fase de reserva antes de aplicar cambios.
      *
      * @param clave valor que se pretende almacenar.
-     * @throws ExcepcionEstructura rango inválido, espacio agotado,
-     *                             duplicado o colisión hash, según la
-     *                             subclase.
+     * @throws ExcepcionEstructura rango inválido, espacio agotado o
+     *                             duplicado, según la subclase.
      */
     public void verificarPuedeInsertar(int clave) throws ExcepcionEstructura {
         validarRangoClave(clave);
@@ -157,46 +184,6 @@ public abstract class EstructuraDeDatos {
                     "La clave " + clave + " ya existe en la estructura; "
                             + "no se permiten duplicados.");
         }
-    }
-
-    /**
-     * Elimina la clave indicada dejando su espacio libre.
-     *
-     * OJO: este recorrido interno es un detalle mecánico de la eliminación,
-     * NO sustituye las búsquedas pedagógicas del proyecto (esas viven en
-     * Model.busquedas con sus pasos visuales).
-     *
-     * @param clave valor a eliminar.
-     * @throws EstructuraVaciaException   si no hay datos.
-     * @throws ClaveNoEncontradaException si la clave no existe.
-     */
-    public void eliminar(int clave)
-            throws EstructuraVaciaException, ClaveNoEncontradaException {
-
-        if (estaVacia()) {
-            throw new EstructuraVaciaException(
-                    "No hay claves para eliminar: la estructura está vacía.");
-        }
-
-        int posicion = buscarPosicionInterna(clave);
-        if (posicion == -1) {
-            throw new ClaveNoEncontradaException(
-                    "No se puede eliminar: la clave " + clave
-                            + " no existe en la estructura.");
-        }
-
-        liberarPosicion(posicion);
-        cantidad--;
-    }
-
-    /**
-     * PASO VARIABLE de la eliminación: las contiguas compactan para no
-     * dejar huecos; las dispersas simplemente vacían el espacio.
-     *
-     * @param posicion índice interno a liberar.
-     */
-    protected void liberarPosicion(int posicion) {
-        claves[posicion] = CLAVE_VACIA;
     }
 
     // ========================================================================
@@ -237,91 +224,45 @@ public abstract class EstructuraDeDatos {
     }
 
     /**
-     * Recorrido interno mínimo para ubicar una clave guardada.
+     * Consulta el contenido crudo de una posición interna indexada. Solo
+     * las familias direccionables (arreglos) devuelven datos reales; el
+     * resto reporta espacio vacío.
      *
-     * @param clave valor buscado.
-     * @return índice donde está la clave, o -1 si no aparece.
+     * @param indice índice interno consultado (base 0).
+     * @return clave almacenada o {@link #CLAVE_VACIA}.
      */
-    private int buscarPosicionInterna(int clave) {
-        for (int i = 0; i < capacidad; i++) {
-            if (claves[i] != CLAVE_VACIA && claves[i] == clave) {
-                return i;
-            }
-        }
-        return -1;
+    public int consultarPosicion(int indice) {
+        return CLAVE_VACIA;
     }
 
     /**
-     * Indica si la clave ya fue almacenada (para rechazar duplicados).
-     *
-     * @param clave valor a verificar.
-     * @return true si ya existe dentro de la estructura.
-     */
-    public boolean contieneClave(int clave) {
-        return buscarPosicionInterna(clave) != -1;
-    }
-
-    /**
-     * Comprueba si los datos están en orden ascendente. La búsqueda binaria
-     * lo usa como salvaguarda antes de operar; ignora espacios vacíos.
+     * Comprueba si los datos están en orden ascendente. Solo tiene sentido
+     * en la estructura ordenada; por defecto las familias no lo garantizan.
      *
      * @return true si cada clave ocupada es menor o igual que la siguiente.
      */
     public boolean estaOrdenadaAscendente() {
-        int anterior = CLAVE_VACIA;
-        for (int i = 0; i < capacidad; i++) {
-            int actual = claves[i];
-            if (actual == CLAVE_VACIA) {
-                continue;
-            }
-            if (anterior != CLAVE_VACIA && anterior > actual) {
-                return false;
-            }
-            anterior = actual;
-        }
-        return true;
+        return false;
     }
 
     /**
-     * Consulta el contenido crudo de una posición interna. Las búsquedas
-     * por transformación de claves la usan para comparar la dirección.
-     *
-     * @param indice índice interno consultado (base 0).
-     * @return clave almacenada o {@link #CLAVE_VACIA} si está libre
-     *         (o si el índice es inválido).
+     * @return true si la familia opera dentro del tamaño configurado;
+     *         false para estructuras de crecimiento libre (árboles).
      */
-    public int consultarPosicion(int indice) {
-        if (indice < 0 || indice >= capacidad) {
-            return CLAVE_VACIA;
-        }
-        return claves[indice];
+    public boolean tieneTamanoFijo() {
+        return true;
     }
 
     // ========================================================================
     // GETTERS / ESTADO
     // ========================================================================
 
-    /**
-     * @return copia densa de las claves ocupadas, en su orden interno
-     *         actual (modificar el arreglo devuelto NO afecta la estructura).
-     */
-    public int[] obtenerClaves() {
-        int[] resultado = new int[cantidad];
-        int k = 0;
-        for (int i = 0; i < capacidad; i++) {
-            if (claves[i] != CLAVE_VACIA) {
-                resultado[k++] = claves[i];
-            }
-        }
-        return resultado;
-    }
-
-    /** @return cantidad de espacios actualmente ocupados (0..capacidad). */
+    /** @return cantidad de claves almacenadas actualmente. */
     public int getCantidad() {
         return cantidad;
     }
 
-    /** @return tamaño exacto de esta estructura (elegido por el usuario). */
+    /** @return tamaño configurado de la estructura. */
     public int getCapacidad() {
         return capacidad;
     }
@@ -336,7 +277,7 @@ public abstract class EstructuraDeDatos {
         return cantidad == 0;
     }
 
-    /** @return true si ya ocupa todos sus espacios disponibles. */
+    /** @return true si agotó sus espacios disponibles (familias acotadas). */
     public boolean estaLlena() {
         return cantidad == capacidad;
     }
@@ -350,6 +291,14 @@ public abstract class EstructuraDeDatos {
     /** {@inheritDoc} Representación legible: [c1, c2, ...] con las claves. */
     @Override
     public String toString() {
-        return getTipo() + Arrays.toString(obtenerClaves());
+        StringBuilder texto = new StringBuilder(getTipo()).append("[");
+        int[] claves = obtenerClaves();
+        for (int i = 0; i < claves.length; i++) {
+            if (i > 0) {
+                texto.append(", ");
+            }
+            texto.append(claves[i]);
+        }
+        return texto.append("]").toString();
     }
 }

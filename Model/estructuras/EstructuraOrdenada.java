@@ -1,60 +1,44 @@
 package Model.estructuras;
 
-import Model.EstructuraDeDatos;
+import Model.colisiones.SolucionColision;
 import Model.excepciones.ExcepcionEstructura;
+import Model.transformaciones.FuncionHash;
 
 /**
  * ============================================================================
- * ESTRUCTURA ORDENADA (ASCENDENTE PERMANENTE)
+ * ESTRUCTURA ORDENADA (REGLA DEL PROYECTO: INSERCIÓN POR FUNCIÓN HASH)
  * ============================================================================
  *
- * Mantiene las claves ordenadas de MENOR A MAYOR en todo momento: cada vez
- * que el usuario ingresa una clave, esta se coloca directamente en su sitio,
- * desplazando los mayores un espacio a la derecha.
+ * En esta versión del proyecto TODAS las búsquedas internas (lineal, binaria
+ * y por transformación) preguntan al inicio qué {@link FuncionHash} se usa
+ * para INSERTAR cada clave, y esa decisión NO puede cambiarse sin reiniciar
+ * la estructura. Por eso la "estructura ordenada" ya no mantiene las claves
+ * ordenadas al insertar: las coloca en la dirección que calcula la función
+ * hash elegida, resolviendo las colisiones con la {@link SolucionColision}
+ * configurada.
  *
- * Es la estructura sobre la que opera la BÚSQUEDA BINARIA. Ordenar durante
- * la inserción (y no justo antes de buscar) garantiza que el requisito de
- * la binaria —trabajar sobre datos ordenados— SIEMPRE se cumple.
- *
- * RESPONSABILIDAD ÚNICA: decidir en qué posición va la clave para conservar
- * el orden ascendente. La mecánica común vive en {@link EstructuraContigua}.
+ * DETALLE ACADÉMICO: el usuario aceptó que esto cambia la definición
+ * clásica de la búsqueda binaria (su requisito de "datos ordenados" deja de
+ * cumplirse); esta clase SOLO aporta la identidad del tipo ("ORDENADA") y
+ * hereda de {@link EstructuraHash} toda la mecánica de transformación de
+ * claves y de resolución de colisiones.
  */
-public class EstructuraOrdenada extends EstructuraContigua {
+public class EstructuraOrdenada extends EstructuraHash {
 
     /**
-     * Crea la estructura ordenada.
+     * Crea la estructura ordenada como una tabla hash dirigida por la
+     * función indicada y con la solución de colisiones elegida.
      *
-     * @param digitosClave dígitos exactos que tendrán las claves (1..7).
-     * @param capacidad    tamaño exacto de la estructura (1..1000).
+     * @param digitosClave     dígitos exactos que tendrán las claves (1..7).
+     * @param capacidad        tamaño exacto de la estructura (1..1000).
+     * @param funcionHash      función que calcula dónde se inserta cada clave.
+     * @param solucionColision técnica para TODAS las colisiones (no null).
      * @throws ExcepcionEstructura si algún parámetro queda fuera de rango.
      */
-    public EstructuraOrdenada(int digitosClave, int capacidad)
+    public EstructuraOrdenada(int digitosClave, int capacidad,
+            FuncionHash funcionHash, SolucionColision solucionColision)
             throws ExcepcionEstructura {
-        super(digitosClave, capacidad);
-    }
-
-    /**
-     * Ubica la clave recorriendo desde el final hacia atrás: mientras las
-     * claves ya guardadas sean MAYORES que la nueva, estas deberán quedar a
-     * su derecha; cuando aparece una clave menor o igual, ahí va la nueva.
-     *
-     * Ejemplo con [1000, 3000, 7000] e insertando 5000:
-     *   - 7000 > 5000 -> sigue retrocediendo.
-     *   - 3000 <= 5000 -> la posición destino es el índice de 7000.
-     *   Resultado: [1000, 3000, 5000, 7000].
-     *
-     * @param clave clave ya validada y no repetida que se desea ubicar.
-     * @return índice donde la clave queda en orden ascendente.
-     */
-    @Override
-    protected int calcularPosicionInsercion(int clave) {
-        int posicion = getCantidad();
-        int[] actuales = obtenerClaves();
-
-        while (posicion > 0 && actuales[posicion - 1] > clave) {
-            posicion--;
-        }
-        return posicion;
+        super(digitosClave, capacidad, funcionHash, solucionColision);
     }
 
     /** @return identificador técnico de este tipo de estructura. */

@@ -52,6 +52,23 @@ public interface FuncionHash {
     }
 
     /**
+     * Utilidad compartida de las técnicas que "miran el tamaño" (cuadrado,
+     * truncamiento y plegamiento): devuelve cuántas CIFRAS se manejan,
+     * tomándolas de la MAYOR DIRECCIÓN POSIBLE de la estructura (tamano - 1).
+     *
+     * Ejemplos acordados con la especificación:
+     *   - tamaño 100 -> mayor dirección 99  -> 2 cifras.
+     *   - tamaño 123 -> mayor dirección 122 -> 3 cifras.
+     *   - tamaño 200 -> mayor dirección 199 -> 3 cifras.
+     *
+     * @param tamanoEstructura tamaño total de la estructura (>= 1).
+     * @return cantidad de cifras base que usan las técnicas.
+     */
+    default int contarCifrasBase(int tamanoEstructura) {
+        return Integer.toString(tamanoEstructura - 1).length();
+    }
+
+    /**
      * Utilidad compartida: cierre estándar de TODAS las funciones del
      * proyecto: se ajusta al tamaño con módulo y AL FINAL se suma 1.
      *

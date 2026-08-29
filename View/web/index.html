@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ciencias de la Computación II</title>
+    <link rel="stylesheet" href="estilos.css">
+</head>
+<body>
+
+<header class="encabezado">
+    <h1>Ciencias de la Computación II</h1>
+</header>
+
+<main class="contenido">
+
+    <!-- ============ MIGAS DE PAN (NAVEGACIÓN) ============ -->
+    <nav class="migas" id="barraMigas">
+        <button id="btnMigaInicio" class="miga">Inicio</button>
+        <span id="migaRuta"></span>
+    </nav>
+
+    <!-- ============ VISTA: INICIO (2 BOTONES) ============ -->
+    <section class="vista-menu vista" id="vista-inicio">
+        <div class="grid-principal">
+            <button class="boton-grande" id="btnVerAlgoritmos">Algoritmos de búsqueda</button>
+            <button class="boton-grande mudo" id="btnVerGrafos">Grafos</button>
+        </div>
+    </section>
+
+    <!-- ============ VISTA: ALGORITMOS DE BÚSQUEDA (3 BOTONES) ============ -->
+    <section class="vista-menu vista" id="vista-algoritmos" hidden>
+        <h2>Algoritmos de búsqueda</h2>
+        <div class="grid-principal">
+            <button class="boton-grande" id="btnVerInternas">Búsquedas internas</button>
+            <button class="boton-grande mudo" id="btnVerExternas">Búsquedas externas</button>
+            <button class="boton-grande mudo" id="btnVerIndices">Índices</button>
+        </div>
+        <button class="btn-volver" data-volver="vista-inicio">← Volver</button>
+    </section>
+
+    <!-- ============ VISTA: BÚSQUEDAS INTERNAS (4 BOTONES) ============ -->
+    <section class="vista-menu vista" id="vista-internas" hidden>
+        <h2>Búsquedas internas</h2>
+        <div class="grid-principal">
+            <button class="boton-grande" data-metodo="LINEAL">Búsqueda lineal</button>
+            <button class="boton-grande" data-metodo="BINARIA">Búsqueda binaria</button>
+            <button class="boton-grande" id="btnVerTransformacion">Búsqueda por transformación de claves</button>
+            <button class="boton-grande" id="btnVerResiduos">Búsquedas por residuos</button>
+        </div>
+        <button class="btn-volver" data-volver="vista-algoritmos">← Volver</button>
+    </section>
+
+    <!-- ============ VISTA: BÚSQUEDAS POR RESIDUOS (3 ÁRBOLES) ============ -->
+    <section class="vista-menu vista" id="vista-residuos" hidden>
+        <h2>Búsquedas por residuos</h2>
+        <div class="grid-principal">
+            <button class="boton-grande" data-metodo="ARBOL DIGITAL">Árbol de búsqueda digital</button>
+            <button class="boton-grande" data-metodo="ARBOL POR RESIDUOS">Árbol de búsqueda por residuos</button>
+            <button class="boton-grande mudo" id="btnVerResiduosMultiples">Árbol de búsqueda por residuos múltiples</button>
+        </div>
+        <button class="btn-volver" data-volver="vista-internas">← Volver</button>
+    </section>
+
+    <!-- ============ VISTA: MÉTODO CONFIGURADO (HOJA) ============ -->
+    <section class="tarjeta vista" id="vista-metodo" hidden>
+        <h2 id="tituloMetodo"></h2>
+        <p class="ayuda" id="ayudaMetodo"></p>
+
+        <div class="fila">
+            <label>
+                Cantidad de cifras de la clave (1-7)
+                <input type="number" id="digitos" min="1" max="7" value="4">
+            </label>
+            <label>
+                Tamaño de la estructura (1-1000)
+                <input type="number" id="tamano" min="1" max="1000" value="100">
+            </label>
+        </div>
+
+        <div class="fila funcion" id="filaFuncion">
+            <fieldset>
+                <legend>Función hash para insertar las claves (no cambia una vez aplicada)</legend>
+                <label class="radio">
+                    <input type="radio" name="funcionHash" value="HASH MOD" checked>
+                    Función hash lineal: dirección = (clave mod espacios) + 1
+                </label>
+                <label class="radio">
+                    <input type="radio" name="funcionHash" value="HASH CUADRADO">
+                    Función hash cuadrado
+                </label>
+                <label class="radio">
+                    <input type="radio" name="funcionHash" value="HASH TRUNCAMIENTO">
+                    Función hash truncamiento
+                </label>
+                <label class="radio">
+                    <input type="radio" name="funcionHash" value="HASH PLEGAMIENTO">
+                    Función hash plegamiento
+                </label>
+            </fieldset>
+        </div>
+
+        <div class="fila colision">
+            <label>
+                Solución de colisión (resuelve TODAS las colisiones siguientes)
+                <select id="soluciones"></select>
+            </label>
+            <label class="check">
+                <input type="checkbox" id="mantener" checked>
+                Conservar las claves actuales al cambiar de método
+            </label>
+        </div>
+
+        <div class="aviso" id="avisoRango"></div>
+
+        <button id="btnIniciarMetodo" class="principal">Aplicar configuración y operar</button>
+
+        <!-- ============ ÁREA DE OPERACIONES (se revela al aplicar) ============ -->
+        <div id="zonaOperaciones" hidden>
+            <h3>Operaciones sobre la estructura</h3>
+            <div class="fila">
+                <label>
+                    Clave
+                    <input type="number" id="clave">
+                </label>
+                <button id="btnInsertar">Insertar</button>
+                <button id="btnBuscar" class="principal">Buscar</button>
+                <button id="btnEliminar" class="peligro">Eliminar</button>
+            </div>
+            <div id="mensaje" class="aviso"></div>
+
+            <!-- Cargar / exportar la estructura para usarla en otros métodos -->
+            <div class="fila estructura-fila">
+                <button id="btnCargarEstructura">Cargar estructura</button>
+                <button id="btnExportarEstructura" class="principal">Exportar estructura</button>
+                <button id="btnReiniciar" class="peligro">Limpiar todo y empezar de cero</button>
+            </div>
+            <div id="zonaEstructura" class="zona-estructura" hidden>
+                <textarea id="estructuraTexto" rows="5"
+                    placeholder="Pegue aquí el JSON exportado (estructura.json) y pulse Aplicar carga..."></textarea>
+                <div class="fila">
+                    <button id="btnAplicarCarga" class="principal">Aplicar carga</button>
+                    <button id="btnCancelarCarga" class="gris">Cancelar</button>
+                </div>
+            </div>
+
+            <!-- Dos columnas: izquierda = animación de la estructura, derecha = pasos -->
+            <div class="piloto">
+                <div class="columna columna-estructura">
+                    <h3>Estructura activa</h3>
+                    <div id="estadoEstructura" class="aviso"></div>
+                    <div id="estadoAnimacion" class="estado-animacion"></div>
+                    <div id="visualEstructura" class="visual"></div>
+                </div>
+                <div class="columna columna-proceso">
+                    <h3>Proceso de la operación</h3>
+                    <div id="listaPasos" class="lista-pasos"></div>
+                </div>
+            </div>
+        </div>
+
+        <button class="btn-volver" id="btnVolverMetodo">← Volver</button>
+    </section>
+
+    <!-- ============ VISTA: PLACEHOLDER (SIN FUNCIONALIDAD) ============ -->
+    <section class="tarjeta vista" id="vista-placeholder" hidden>
+        <h2 id="tituloPlaceholder"></h2>
+        <div class="aviso" id="mensajePlaceholder"></div>
+        <button class="btn-volver" id="btnVolverPlaceholder">← Volver</button>
+    </section>
+
+</main>
+
+<script src="app.js" defer></script>
+</body>
+</html>
