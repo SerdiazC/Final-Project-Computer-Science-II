@@ -4,6 +4,7 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 
 import Controller.GestorBusquedas;
+import Controller.GestorBusquedasExternas;
 import Model.EstructuraDeDatos;
 import Model.busquedas.PasoBusqueda;
 import Model.busquedas.ResultadoBusqueda;
@@ -69,6 +70,9 @@ public class ServidorWeb {
     /** Controlador que orquesta estructuras y búsquedas (una por sesión). */
     private GestorBusquedas gestor;
 
+    /** Controlador de las BÚSQUEDAS EXTERNAS (cubetas dinámicas). */
+    private GestorBusquedasExternas externo;
+
     /** Puerta de entrada HTTP del JDK. */
     private HttpServer servidor;
 
@@ -86,6 +90,8 @@ public class ServidorWeb {
         this.gestor = new GestorBusquedas(
                 EstructuraDeDatos.DIGITOS_MINIMOS,
                 EstructuraDeDatos.CAPACIDAD_MINIMA);
+        this.externo = new GestorBusquedasExternas(
+                EstructuraDeDatos.DIGITOS_MINIMOS);
     }
 
     /**
@@ -151,6 +157,22 @@ public class ServidorWeb {
                 responderJson(intercambio, exportarJson());
             } else if (ruta.equals("/api/cargar")) {
                 responderJson(intercambio, cargarJson(intercambio));
+            } else if (ruta.equals("/api/externo/estado")) {
+                responderJson(intercambio, externoEstadoJson());
+            } else if (ruta.equals("/api/externo/configurar")) {
+                responderJson(intercambio, externoConfigurarJson(intercambio));
+            } else if (ruta.equals("/api/externo/seleccionar")) {
+                responderJson(intercambio, externoSeleccionarJson(intercambio));
+            } else if (ruta.equals("/api/externo/insertar")) {
+                responderJson(intercambio, externoInsertarJson(intercambio));
+            } else if (ruta.equals("/api/externo/eliminar")) {
+                responderJson(intercambio, externoEliminarJson(intercambio));
+            } else if (ruta.equals("/api/externo/buscar")) {
+                responderJson(intercambio, externoBuscarJson(intercambio));
+            } else if (ruta.equals("/api/externo/reiniciar")) {
+                responderJson(intercambio, externoReiniciarJson());
+            } else if (ruta.equals("/api/externo/cargar")) {
+                responderJson(intercambio, externoCargarJson(intercambio));
             } else {
                 servirEstatico(intercambio, ruta);
             }
@@ -583,6 +605,301 @@ public class ServidorWeb {
                     + ",\"mensaje\":" + SerializadorJson.cadena(resultado.getMensaje())
                     + ",\"pasos\":" + pasos + '}';
         } catch (IllegalArgumentException | IllegalStateException e) {
+            return errorJson(e.getMessage());
+        }
+    }
+
+    // ========================================================================
+    // BÚSQUEDAS EXTERNAS (CUBETAS DINÁMICAS) - ENDPOINTS /api/externo/*
+    // ========================================================================
+
+    /**
+     * Estado de las búsquedas externas: catálogo, método activo, dígitos,
+     * rangos y la estructura de cubetas serializada para la vista.
+     *
+     * @return literal JSON de estado externo.
+     */
+    private String externoEstadoJson() {
+        StringBuilder json = new StringBuilder("{");
+
+        json.append("\"seleccionHecha\":").append(externo.isSeleccionHecha());
+        json.append(",\"metodo\":")
+                .append(SerializadorJson.cadena(externo.getMetodoActivo()));
+        json.append(",\"digitos\":").append(externo.getDigitosClave());
+        json.append(",\"rangoMinimo\":").append(
+                externo.getEstructura().getValorMinimo());
+        json.append(",\"rangoMaximo\":").append(
+                externo.getEstructura().getValorMaximo());
+
+        json.append(",\"busquedas\":[");
+        List<String> nombres = externo.getNombresBusquedas();
+        for (int i = 0; i < nombres.size(); i++) {
+            if (i > 0) {
+                json.append(',');
+            }
+            json.append(SerializadorJson.cadena(nombres.get(i)));
+        }
+        json.append("]");
+
+        json.append(",\"estructura\":").append(externoEstructuraJson());
+        json.append('}');
+        return json.toString();
+    }
+
+    /**
+     * Serializa la estructura externa de cubetas: cada cubeta con su
+     * contenido, capacidad y cantidad, más las métricas globales y el
+     * detalle de la última inserción (colisión / directa) y expansiones.
+     *
+     * @return literal JSON de la estructura externa.
+     */
+    private String externoEstructuraJson() {
+        Model.estructuras.externas.EstructuraCubetas est
+                = externo.getEstructura();
+
+        StringBuilder json = new StringBuilder("{");
+        json.append("\"tipo\":\"").append("EXTERN\u00c1").append("\"");
+        json.append(",\"numCubetas\":").append(est.getNumeroCubetas());
+        json.append(",\"cantidad\":").append(est.getCantidad());
+        json.append(",\"capacidadBase\":").append(est.getCapacidadBase());
+        json.append(",\"filas\":").append(est.getFilas());
+        json.append(",\"cubetasPorFila\":").append(est.getCubetasPorFila());
+        json.append(",\"densidadExpansion\":").append(
+                est.densidadExpansion());
+        json.append(",\"densidadReduccion\":").append(
+                est.densidadReduccion());
+
+        json.append(",\"ultimaInsercion\":");
+        json.append("{\"tipo\":")
+                .append(SerializadorJson.cadena(externo.getUltimoTipoInsercion()))
+                .append(",\"cubeta\":").append(externo.getUltimaCubetaInsercion())
+                .append('}');
+
+        json.append(",\"expansionParcial\":").append(
+                est.getUltimaExpansionParcial());
+        json.append(",\"expansionTotal\":").append(
+                est.getUltimaExpansionTotal());
+
+        json.append(",\"cubetas\":[");
+        for (int i = 0; i < est.getNumeroCubetas(); i++) {
+            if (i > 0) {
+                json.append(',');
+            }
+            Model.estructuras.externas.Cubeta cubeta = est.consultarCubeta(i);
+            json.append("{\"indice\":").append(i)
+                    .append(",\"capacidad\":").append(cubeta.getCapacidad())
+                    .append(",\"cantidad\":").append(cubeta.getCantidad())
+                    .append(",\"datos\":")
+                    .append(SerializadorJson.arregloEnteros(cubeta.getDatos()))
+                    .append('}');
+        }
+        json.append("]");
+        json.append('}');
+        return json.toString();
+    }
+
+    /**
+     * (Re)configura la cantidad de dígitos de las claves externas, creando
+     * una estructura nueva y vacía.
+     *
+     * @param intercambio contexto HTTP con el parámetro digitos.
+     * @return JSON de resultado.
+     */
+    private String externoConfigurarJson(HttpExchange intercambio) {
+        Map<String, String> parametros = leerParametros(intercambio);
+        try {
+            int digitos = enteroObligatorio(parametros, "digitos");
+            String filasTexto = parametros.get("filas");
+            String columnasTexto = parametros.get("cubetasPorFila");
+            if (filasTexto != null && !filasTexto.isBlank()
+                    && columnasTexto != null && !columnasTexto.isBlank()) {
+                int cubetasPorFila = Integer.parseInt(columnasTexto.trim());
+                int filas = Integer.parseInt(filasTexto.trim());
+                externo.configurar(digitos, cubetasPorFila, filas);
+            } else {
+                String cubetasTexto = parametros.get("numCubetas");
+                if (cubetasTexto == null || cubetasTexto.isBlank()) {
+                    externo.configurar(digitos);
+                } else {
+                    int cubetas = Integer.parseInt(cubetasTexto.trim());
+                    externo.configurar(digitos, cubetas);
+                }
+            }
+            return okJson("Búsqueda externa configurada: claves de " + digitos
+                    + " dígito(s), estructura de cubetas nueva y vacía.");
+        } catch (ExcepcionEstructura e) {
+            return errorJson(e.getMessage());
+        } catch (IllegalArgumentException e) {
+            return errorJson(e.getMessage());
+        }
+    }
+
+    /**
+     * Selecciona la técnica de búsqueda externa activa (LINEAL/BINARIA/HASH MOD).
+     *
+     * @param intercambio contexto HTTP con el parámetro metodo.
+     * @return JSON de resultado.
+     */
+    private String externoSeleccionarJson(HttpExchange intercambio) {
+        Map<String, String> parametros = leerParametros(intercambio);
+        try {
+            String metodo = textoObligatorio(parametros, "metodo");
+            externo.seleccionar(metodo);
+            return okJson("Búsqueda externa activa: " + metodo + ".");
+        } catch (IllegalArgumentException e) {
+            return errorJson(e.getMessage());
+        }
+    }
+
+    /**
+     * Reconstruye la estructura externa exportada: reconfigura las cubetas a
+     * partir de la organización en filas y reinserta todas las claves. Como la
+     * inserción es determinista (hash mod), el resultado reproduce exactamente
+     * el estado guardado en el archivo.
+     *
+     * @param intercambio contexto HTTP con digitos, filas, cubetasPorFila,
+     *                    metodo y claves (enteros separados por coma).
+     * @return JSON de resultado.
+     */
+    private String externoCargarJson(HttpExchange intercambio) {
+        Map<String, String> parametros = leerParametros(intercambio);
+        try {
+            int digitos = enteroObligatorio(parametros, "digitos");
+            int cubetasPorFila = enteroObligatorio(parametros, "cubetasPorFila");
+            int filas = enteroObligatorio(parametros, "filas");
+            externo.configurar(digitos, cubetasPorFila, filas);
+
+            String metodo = parametros.get("metodo");
+            if (metodo != null && !metodo.isBlank()) {
+                externo.seleccionar(metodo.trim());
+            }
+
+            String texto = textoObligatorio(parametros, "claves");
+            int cargadas = 0;
+            if (!texto.isBlank()) {
+                for (String parte : texto.split(",")) {
+                    if (parte.isBlank()) {
+                        continue;
+                    }
+                    externo.insertarClave(Integer.parseInt(parte.trim()));
+                    cargadas++;
+                }
+            }
+            return okJson("Estructura externa cargada: " + cargadas
+                    + " clave(s) en las " + (cubetasPorFila * filas)
+                    + " cubetas (" + cubetasPorFila + " por fila x "
+                    + filas + " fila(s)).");
+        } catch (NumberFormatException e) {
+            return errorJson("El parámetro claves debe ser una lista de "
+                    + "enteros separados por comas.");
+        } catch (ExcepcionEstructura e) {
+            return errorJson(e.getMessage());
+        } catch (IllegalArgumentException e) {
+            return errorJson(e.getMessage());
+        }
+    }
+
+    /**
+     * Inserta una clave en la estructura externa y devuelve el tipo de
+     * inserción (colisión/directa) con su cubeta para animar la vista.
+     *
+     * @param intercambio contexto HTTP con el parámetro clave.
+     * @return JSON con el resultado y el detalle de la inserción.
+     */
+    private String externoInsertarJson(HttpExchange intercambio) {
+        Map<String, String> parametros = leerParametros(intercambio);
+        try {
+            int clave = enteroObligatorio(parametros, "clave");
+            externo.insertarClave(clave);
+            return "{\"ok\":true"
+                    + ",\"mensaje\":" + SerializadorJson.cadena(
+                            "Clave " + clave + " insertada en la cubeta "
+                                    + externo.getUltimaCubetaInsercion() + ".")
+                    + ",\"tipo\":" + SerializadorJson.cadena(
+                            externo.getUltimoTipoInsercion())
+                    + ",\"cubeta\":" + externo.getUltimaCubetaInsercion()
+                    + ",\"expansionParcial\":" + externo.getEstructura()
+                            .getUltimaExpansionParcial()
+                    + ",\"expansionTotal\":" + externo.getEstructura()
+                            .getUltimaExpansionTotal()
+                    + '}';
+        } catch (ExcepcionEstructura e) {
+            return errorJson(e.getMessage());
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return errorJson(e.getMessage());
+        }
+    }
+
+    /**
+     * Elimina una clave de la estructura externa.
+     *
+     * @param intercambio contexto HTTP con el parámetro clave.
+     * @return JSON de resultado.
+     */
+    private String externoEliminarJson(HttpExchange intercambio) {
+        Map<String, String> parametros = leerParametros(intercambio);
+        try {
+            int clave = enteroObligatorio(parametros, "clave");
+            externo.eliminarClave(clave);
+            return okJson("Clave " + clave + " eliminada de la estructura externa.");
+        } catch (ExcepcionEstructura e) {
+            return errorJson(e.getMessage());
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return errorJson(e.getMessage());
+        }
+    }
+
+    /**
+     * Ejecuta la búsqueda externa ACTIVA y devuelve sus pasos para animar.
+     *
+     * @param intercambio contexto HTTP con el parámetro clave.
+     * @return JSON con encontrada/indice/pasos/mensaje.
+     */
+    private String externoBuscarJson(HttpExchange intercambio) {
+        Map<String, String> parametros = leerParametros(intercambio);
+        try {
+            int clave = enteroObligatorio(parametros, "clave");
+            ResultadoBusqueda resultado = externo.buscar(clave);
+
+            StringBuilder pasos = new StringBuilder("[");
+            List<PasoBusqueda> lista = resultado.getPasos();
+            for (int i = 0; i < lista.size(); i++) {
+                PasoBusqueda paso = lista.get(i);
+                if (i > 0) {
+                    pasos.append(',');
+                }
+                pasos.append("{\"numero\":").append(paso.getNumeroPaso())
+                        .append(",\"indice\":").append(paso.getIndiceExplorado())
+                        .append(",\"limiteInferior\":").append(paso.getLimiteInferior())
+                        .append(",\"limiteSuperior\":").append(paso.getLimiteSuperior())
+                        .append(",\"claveComparada\":").append(paso.getClaveComparada())
+                        .append(",\"descripcion\":")
+                        .append(SerializadorJson.cadena(paso.getDescripcion()))
+                        .append('}');
+            }
+            pasos.append(']');
+
+            return "{\"encontrada\":" + resultado.isEncontrada()
+                    + ",\"indice\":" + resultado.getIndiceEncontrado()
+                    + ",\"mensaje\":" + SerializadorJson.cadena(resultado.getMensaje())
+                    + ",\"pasos\":" + pasos + '}';
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return errorJson(e.getMessage());
+        }
+    }
+
+    /**
+     * Limpia la búsqueda externa: recrea la estructura con los mismos
+     * dígitos y cancela el método seleccionado.
+     *
+     * @return JSON de resultado.
+     */
+    private String externoReiniciarJson() {
+        try {
+            externo.configurar(externo.getDigitosClave());
+            return okJson("Búsqueda externa reiniciada: estructura nueva y "
+                    + "vacía. Seleccione un método para operar.");
+        } catch (ExcepcionEstructura e) {
             return errorJson(e.getMessage());
         }
     }

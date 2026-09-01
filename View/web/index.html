@@ -33,7 +33,7 @@
         <h2>Algoritmos de búsqueda</h2>
         <div class="grid-principal">
             <button class="boton-grande" id="btnVerInternas">Búsquedas internas</button>
-            <button class="boton-grande mudo" id="btnVerExternas">Búsquedas externas</button>
+            <button class="boton-grande" id="btnVerExternas">Búsquedas externas</button>
             <button class="boton-grande mudo" id="btnVerIndices">Índices</button>
         </div>
         <button class="btn-volver" data-volver="vista-inicio">← Volver</button>
@@ -135,14 +135,7 @@
                 <button id="btnExportarEstructura" class="principal">Exportar estructura</button>
                 <button id="btnReiniciar" class="peligro">Limpiar todo y empezar de cero</button>
             </div>
-            <div id="zonaEstructura" class="zona-estructura" hidden>
-                <textarea id="estructuraTexto" rows="5"
-                    placeholder="Pegue aquí el JSON exportado (estructura.json) y pulse Aplicar carga..."></textarea>
-                <div class="fila">
-                    <button id="btnAplicarCarga" class="principal">Aplicar carga</button>
-                    <button id="btnCancelarCarga" class="gris">Cancelar</button>
-                </div>
-            </div>
+            <input type="file" id="archivoInput" accept=".json,application/json" hidden>
 
             <!-- Dos columnas: izquierda = animación de la estructura, derecha = pasos -->
             <div class="piloto">
@@ -160,6 +153,80 @@
         </div>
 
         <button class="btn-volver" id="btnVolverMetodo">← Volver</button>
+    </section>
+
+    <!-- ============ VISTA: BÚSQUEDAS EXTERNAS (CUBETAS) ============ -->
+    <section class="vista-menu vista" id="vista-externas" hidden>
+        <h2>Búsquedas externas</h2>
+        <div class="grid-principal">
+            <button class="boton-grande" data-externo="LINEAL">Búsqueda externa lineal</button>
+            <button class="boton-grande" data-externo="BINARIA">Búsqueda externa binaria</button>
+            <button class="boton-grande" data-externo="HASH MOD">Búsqueda externa hash</button>
+        </div>
+        <button class="btn-volver" data-volver="vista-algoritmos">← Volver</button>
+    </section>
+
+    <!-- ============ VISTA: MÉTODO EXTERNO CONFIGURADO (HOJA) ============ -->
+    <section class="tarjeta vista" id="vista-externometodo" hidden>
+        <h2 id="extTituloMetodo"></h2>
+        <p class="ayuda" id="extAyudaMetodo"></p>
+
+        <div class="fila">
+            <label>
+                Cantidad de cifras de la clave (1-7)
+                <input type="number" id="extDigitos" min="1" max="7" value="4">
+            </label>
+            <label>
+                Cubetas por fila (2-64)
+                <input type="number" id="extNumCubetas" min="2" max="64" value="4">
+            </label>
+            <label>
+                Número de filas (1-16)
+                <input type="number" id="extFilas" min="1" max="16" value="1">
+            </label>
+            <span class="nota-externo">
+                Posición de la clave: hash mod comun
+            </span>
+        </div>
+
+        <div class="aviso" id="extAvisoRango"></div>
+
+        <button id="extBtnIniciar" class="principal">Aplicar configuración y operar</button>
+
+        <div id="extZonaOperaciones" hidden>
+            <h3>Operaciones sobre las cubetas</h3>
+            <div class="fila">
+                <label>
+                    Clave
+                    <input type="number" id="extClave">
+                </label>
+                <button id="extBtnInsertar">Insertar</button>
+                <button id="extBtnBuscar" class="principal">Buscar</button>
+                <button id="extBtnEliminar" class="peligro">Eliminar</button>
+            </div>
+            <div id="extMensaje" class="aviso"></div>
+            <div class="fila estructura-fila">
+                <button id="extBtnCargar">Cargar estructura</button>
+                <button id="extBtnExportar" class="principal">Exportar estructura</button>
+                <button id="extBtnReiniciar" class="peligro">Limpiar y empezar de cero</button>
+            </div>
+            <input type="file" id="extArchivoInput" accept=".json,application/json" hidden>
+
+            <div class="piloto">
+                <div class="columna columna-estructura">
+                    <h3>Cubetas de la estructura externa</h3>
+                    <div id="extEstadoEstructura" class="aviso"></div>
+                    <div id="extEstadoAnimacion" class="estado-animacion"></div>
+                    <div id="extVisualCubetas" class="visual"></div>
+                </div>
+                <div class="columna columna-proceso">
+                    <h3>Proceso de la operación</h3>
+                    <div id="extListaPasos" class="lista-pasos"></div>
+                </div>
+            </div>
+        </div>
+
+        <button class="btn-volver" data-volver="vista-externas">← Volver</button>
     </section>
 
     <!-- ============ VISTA: PLACEHOLDER (SIN FUNCIONALIDAD) ============ -->

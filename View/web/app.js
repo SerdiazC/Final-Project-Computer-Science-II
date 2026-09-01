@@ -344,7 +344,7 @@ let temporizadorHallado = null;
 /** Habilita o bloquea los botones de operación durante la animación. */
 function bloquearBotones(bloquear) {
     ['btnInsertar', 'btnBuscar', 'btnEliminar', 'btnReiniciar',
-        'btnCargarEstructura', 'btnExportarEstructura', 'btnAplicarCarga'
+        'btnCargarEstructura', 'btnExportarEstructura'
     ].forEach((id) => {
         document.getElementById(id).disabled = bloquear;
     });
@@ -705,12 +705,9 @@ async function exportarEstructura() {
             claves: resultado.claves || []
         };
         const texto = JSON.stringify(datos, null, 2);
-        document.getElementById('estructuraTexto').value = texto;
-        document.getElementById('zonaEstructura').hidden = false;
         descargarArchivo('estructura.json', texto);
         mostrarMensaje('Estructura exportada con ' + datos.claves.length
-            + ' clave(s): archivo "estructura.json" descargado, y el JSON '
-            + 'quedó listo para copiar.', false);
+            + ' clave(s): archivo "estructura.json" descargado.', false);
     } catch (error) {
         mostrarMensaje('Error exportando: ' + error.message, true);
     }
@@ -729,47 +726,40 @@ function descargarArchivo(nombre, contenido) {
     URL.revokeObjectURL(url);
 }
 
-/** Muestra el área para pegar la estructura exportada. */
-function mostrarZonaCarga() {
-    document.getElementById('estructuraTexto').value = '';
-    document.getElementById('zonaEstructura').hidden = false;
-    document.getElementById('estructuraTexto').focus();
-}
-
-/** Cancela la carga sin tocar la estructura. */
-function cancelarCarga() {
-    document.getElementById('zonaEstructura').hidden = true;
-    document.getElementById('estructuraTexto').value = '';
+/** Abre el selector de archivos para cargar la estructura exportada. */
+function cargarEstructura() {
+    document.getElementById('archivoInput').click();
 }
 
 /**
- * Lee el JSON pegado, extrae sus claves y las carga en el método activo
- * reconstruyendo su estructura (permite usar la misma estructura en
+ * Lee el archivo JSON elegido, extrae sus claves y las carga en el método
+ * activo reconstruyendo su estructura (permite usar la misma estructura en
  * diferentes tipos de búsqueda).
  */
-async function aplicarCarga() {
+async function cargarArchivo(evento) {
+    const archivo = evento.target.files && evento.target.files[0];
+    if (!archivo) {
+        return;
+    }
     try {
-        const texto = document.getElementById('estructuraTexto').value.trim();
-        if (texto === '') {
-            mostrarMensaje('Pegue primero el JSON exportado.', true);
-            return;
-        }
-        const datos = JSON.parse(texto);
+        const contenido = await archivo.text();
+        const datos = JSON.parse(contenido);
         const claves = datos.claves;
         if (!Array.isArray(claves)) {
             throw new Error('El archivo no contiene la lista "claves".');
         }
+        document.getElementById('archivoInput').value = '';
         const ruta = '/api/cargar?claves=' + encodeURIComponent(claves.join(','));
         const resultado = await llamarApi(ruta);
         if (resultado.ok) {
-            document.getElementById('zonaEstructura').hidden = true;
             await recargarEstado();
             mostrarMensaje(traducirMensaje(resultado.mensaje), false);
         } else {
             mostrarMensaje(traducirMensaje(resultado.mensaje), true);
         }
     } catch (error) {
-        mostrarMensaje('Datos inválidos: ' + error.message, true);
+        mostrarMensaje('Archivo inválido: ' + error.message, true);
+        document.getElementById('archivoInput').value = '';
     }
 }
 
@@ -979,9 +969,8 @@ document.getElementById('btnVerInternas').addEventListener('click', () => {
     navegarA('vista-internas', ['Algoritmos de búsqueda', 'Búsquedas internas']);
 });
 document.getElementById('btnVerExternas').addEventListener('click', () => {
-    abrirPlaceholder('Búsquedas externas',
-        'La sección de Búsquedas externas aún no está implementada. '
-        + 'Estará disponible en una próxima versión.');
+    navegarA('vista-externas',
+        ['Algoritmos de búsqueda', 'Búsquedas externas']);
 });
 document.getElementById('btnVerIndices').addEventListener('click', () => {
     abrirPlaceholder('Índices',
@@ -1021,14 +1010,477 @@ document.getElementById('btnBuscar').addEventListener('click', () => operarClave
 document.getElementById('btnEliminar').addEventListener('click', () => operarClave('eliminar'));
 
 // --- Cargar / exportar estructura ---
-document.getElementById('btnCargarEstructura').addEventListener('click', mostrarZonaCarga);
+document.getElementById('btnCargarEstructura').addEventListener('click', cargarEstructura);
 document.getElementById('btnExportarEstructura').addEventListener('click', exportarEstructura);
 document.getElementById('btnReiniciar').addEventListener('click', limpiarTodo);
-document.getElementById('btnAplicarCarga').addEventListener('click', aplicarCarga);
-document.getElementById('btnCancelarCarga').addEventListener('click', cancelarCarga);
+document.getElementById('archivoInput').addEventListener('change', cargarArchivo);
 
 recargarEstado().catch((error) => {
     const aviso = document.getElementById('mensaje');
     aviso.textContent = 'No se pudo contactar el servidor: ' + error.message;
     aviso.classList.add('error');
 });
+
+// ====================================================================
+// BÚSQUEDAS EXTERNAS (CUBETAS DINÁMICAS)
+// ====================================================================
+
+/** Estado de la última consulta /api/externo/estado. */
+let extEstado = { seleccionHecha: false, estructura: {} };
+
+/** Método de búsqueda externa de la hoja abierta. */
+let extMetodoActual = null;
+
+/** true mientras una animación externa está en curso. */
+let extAnimando = false;
+
+/** Recarga el estado externo desde el servidor. */
+async function extRecargarEstado() {
+    extEstado = await llamarApi('/api/externo/estado');
+    extPintarAviso();
+    extDibujar();
+    return extEstado;
+}
+
+/** Muestra el método externo en la hoja y navega a su configuración. */
+function extAbrirMetodo(nombre) {
+    extMetodoActual = nombre;
+    const migas = ['Algoritmos de búsqueda', 'Búsquedas externas', nombre];
+
+    document.getElementById('extTituloMetodo').textContent = nombre;
+    document.getElementById('extAyudaMetodo').textContent = '';
+    document.getElementById('extZonaOperaciones').hidden = true;
+    document.getElementById('extArchivoInput').value = '';
+    document.getElementById('extListaPasos').innerHTML = '';
+    document.getElementById('extMensaje').textContent =
+        'Aplique la configuración para comenzar a operar.';
+    document.getElementById('extMensaje').classList.remove('error', 'exito');
+    document.getElementById('extEstadoEstructura').textContent = '';
+    document.getElementById('extVisualCubetas').innerHTML = '';
+    document.getElementById('extEstadoAnimacion').textContent = '';
+
+    navegarA('vista-externometodo', migas);
+}
+
+/** Aplica dígitos y selecciona el método externo, luego revela las operaciones. */
+async function extAplicar() {
+    const digitos = document.getElementById('extDigitos').value.trim();
+    if (digitos === '') {
+        extMostrarMensaje('Indique la cantidad de dígitos de la clave.', true);
+        return;
+    }
+    if (extMetodoActual === null) {
+        extMostrarMensaje('Seleccione primero el método de búsqueda externa.', true);
+        return;
+    }
+    try {
+        const cubetasFila = document.getElementById('extNumCubetas').value.trim();
+        const filas = document.getElementById('extFilas').value.trim();
+        let rutaConfig = '/api/externo/configurar?digitos=' + digitos;
+        if (cubetasFila !== '' && filas !== '') {
+            rutaConfig += '&cubetasPorFila=' + cubetasFila + '&filas=' + filas;
+        } else if (cubetasFila !== '') {
+            rutaConfig += '&numCubetas=' + cubetasFila;
+        }
+        const configurado = await llamarApi(rutaConfig);
+        if (!configurado.ok) {
+            extMostrarMensaje(configurado.mensaje, true);
+            return;
+        }
+        const rutaSel = '/api/externo/seleccionar?metodo='
+            + encodeURIComponent(extMetodoActual);
+        const seleccionado = await llamarApi(rutaSel);
+        if (!seleccionado.ok) {
+            extMostrarMensaje(seleccionado.mensaje, true);
+            return;
+        }
+        document.getElementById('extZonaOperaciones').hidden = false;
+        document.getElementById('extListaPasos').innerHTML = '';
+        await extRecargarEstado();
+        extMostrarMensaje(seleccionado.mensaje, false);
+        document.getElementById('extZonaOperaciones')
+            .scrollIntoView({ block: 'start', behavior: 'smooth' });
+    } catch (error) {
+        extMostrarMensaje('Error conectando con el servidor: ' + error.message, true);
+    }
+}
+
+function extMostrarMensaje(texto, esError) {
+    const aviso = document.getElementById('extMensaje');
+    aviso.textContent = texto;
+    aviso.classList.remove('error', 'exito');
+    aviso.classList.add(esError ? 'error' : 'exito');
+}
+
+function extPintarAviso() {
+    const aviso = document.getElementById('extAvisoRango');
+    const estado = extEstado;
+    if (!estado.seleccionHecha) {
+        aviso.textContent = '';
+        return;
+    }
+    aviso.textContent = 'Claves de ' + estado.digitos + ' dígito(s): rango '
+        + estado.rangoMinimo + '..' + estado.rangoMaximo
+        + ' | Método activo: ' + estado.metodo + '.';
+    aviso.classList.remove('error', 'exito');
+}
+
+/** Bloquea o habilita los botones de operación externa durante la animación. */
+function extBloquearBotones(bloquear) {
+    ['extBtnInsertar', 'extBtnBuscar', 'extBtnEliminar', 'extBtnReiniciar'
+    ].forEach((id) => {
+        document.getElementById(id).disabled = bloquear;
+    });
+}
+
+/** Agrega una línea al registro del proceso externo. */
+function extAnadirLog(texto, esError) {
+    const contenedor = document.getElementById('extListaPasos');
+    const div = document.createElement('div');
+    div.className = 'paso ' + (esError ? 'error' : 'encontrado');
+    div.innerHTML = '<span class="numero">' + (esError ? 'Error' : 'Hecho')
+        + '</span><span class="detalle">' + escapeHtml(texto) + '</span>';
+    contenedor.appendChild(div);
+    contenedor.scrollTop = contenedor.scrollHeight;
+}
+
+/** Localiza la celda-cubeta que contiene una clave dada. */
+function extUbicarCubeta(clave) {
+    const objetivo = String(clave);
+    const cubetas = document.querySelectorAll('#extVisualCubetas .cubeta');
+    for (const cubeta of cubetas) {
+        const chips = cubeta.querySelectorAll('.clave-ext');
+        for (const chip of chips) {
+            if (chip.textContent.trim() === objetivo) {
+                return cubeta;
+            }
+        }
+    }
+    return null;
+}
+
+/**
+ * Reproduce la búsqueda externa animada: ilumina la cubeta comparada en cada
+ * paso y registra el detalle en el panel derecho.
+ */
+async function extAnimarBusqueda(pasos, encontrada) {
+    const pasosLog = document.getElementById('extListaPasos');
+    pasosLog.innerHTML = '';
+
+    let previo = null;
+    for (const paso of pasos) {
+        if (previo) {
+            previo.cubeta.classList.remove('comparando');
+            previo.cubeta.classList.add('barrido');
+        }
+        document.getElementById('extEstadoAnimacion').textContent =
+            'Paso ' + paso.numero + ': ' + paso.descripcion;
+        const cubeta = document.querySelector(
+            '#extVisualCubetas .cubeta[data-indice="' + paso.indice + '"]');
+        if (cubeta) {
+            cubeta.classList.add('comparando');
+            cubeta.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            previo = { cubeta };
+        } else {
+            previo = null;
+        }
+        const div = document.createElement('div');
+        div.className = 'paso';
+        div.innerHTML = '<span class="numero">Paso ' + paso.numero
+            + '</span><span class="detalle">' + escapeHtml(paso.descripcion)
+            + '</span>';
+        pasosLog.appendChild(div);
+        pasosLog.scrollTop = pasosLog.scrollHeight;
+        await new Promise((resolver) => setTimeout(resolver, 520));
+    }
+    if (previo) {
+        previo.cubeta.classList.remove('comparando');
+    }
+    document.getElementById('extEstadoAnimacion').textContent = '';
+}
+
+/** Animación de inserción externa: resalta la cubeta destino. */
+function extAnimarInsercion(detalle) {
+    const cubeta = document.querySelector(
+        '#extVisualCubetas .cubeta[data-indice="' + detalle.cubeta + '"]');
+    if (!cubeta) {
+        return;
+    }
+    cubeta.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    cubeta.classList.add(detalle.tipo === 'colision' ? 'colision' : 'insertando');
+    setTimeout(() => {
+        cubeta.classList.remove('colision', 'insertando');
+    }, 900);
+}
+
+/** Operación externa genérica (insertar/buscar/eliminar). */
+async function extOperar(operacion) {
+    if (extAnimando) {
+        return;
+    }
+    const valor = document.getElementById('extClave').value.trim();
+    if (valor === '') {
+        extMostrarMensaje('Escriba una clave.', true);
+        return;
+    }
+    if (parseInt(valor, 10) < parseInt(extEstado.rangoMinimo, 10)
+            || parseInt(valor, 10) > parseInt(extEstado.rangoMaximo, 10)) {
+        extMostrarMensaje('La clave ' + valor + ' está fuera del rango válido '
+            + extEstado.rangoMinimo + '..' + extEstado.rangoMaximo + '.', true);
+        return;
+    }
+
+    extAnimando = true;
+    extBloquearBotones(true);
+    try {
+        const ruta = '/api/externo/' + operacion + '?clave=' + encodeURIComponent(valor);
+        const resultado = await llamarApi(ruta);
+
+        if (operacion === 'buscar') {
+            await extRecargarEstado();
+            await extAnimarBusqueda(resultado.pasos || [], resultado.encontrada);
+            if (resultado.encontrada) {
+                const cubeta = document.querySelector(
+                    '#extVisualCubetas .cubeta[data-indice="' + resultado.indice + '"]');
+                if (cubeta) {
+                    cubeta.classList.remove('comparando', 'barrido');
+                    cubeta.classList.add('hallado');
+                    cubeta.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    setTimeout(() => cubeta.classList.remove('hallado'), 2200);
+                }
+            }
+            extAnadirLog(resultado.mensaje, !resultado.encontrada);
+            extMostrarMensaje(resultado.mensaje, !resultado.encontrada);
+        } else {
+            document.getElementById('extListaPasos').innerHTML = '';
+            if (!resultado.ok) {
+                extAnadirLog(resultado.mensaje, true);
+                extMostrarMensaje(resultado.mensaje, true);
+                return;
+            }
+            await extRecargarEstado();
+            if (operacion === 'insertar') {
+                extAnimarInsercion({ cubeta: resultado.cubeta, tipo: resultado.tipo });
+                if (resultado.tipo === 'colision') {
+                    extAnadirLog('¡Colisión! La cubeta ' + resultado.cubeta
+                        + ' ya contenía otra clave; quedan ENLAZADAS.', false);
+                }
+                if (resultado.expansionTotal && resultado.expansionTotal > 0) {
+                    const reps = Intl.NumberFormat('es').format(
+                        extEstado.estructura.cantidad);
+                    const aviso = 'EXPANSIÓN: la estructura superó el 75% de '
+                        + 'capacidad y se redimensionó a ' + resultado.expansionTotal
+                        + ' cubetas, recalculando el hash con el nuevo total '
+                        + '(' + reps + ' datos, incluyendo los enlazados).';
+                    extAnadirLog(aviso, false);
+                    extMostrarMensaje(aviso, false);
+                    document.getElementById('extMensaje').classList.remove('error', 'exito');
+                    document.getElementById('extMensaje').classList.add('exito');
+                } else {
+                    extAnadirLog(resultado.mensaje, false);
+                    extMostrarMensaje(resultado.mensaje, false);
+                }
+            } else {
+                extAnadirLog(resultado.mensaje, false);
+                extMostrarMensaje(resultado.mensaje, false);
+            }
+        }
+    } catch (error) {
+        extMostrarMensaje('Error conectando con el servidor: ' + error.message, true);
+    } finally {
+        extAnimando = false;
+        extBloquearBotones(false);
+    }
+}
+
+/** Limpia la búsqueda externa y vuelve a la pantalla de métodos externos. */
+async function extReiniciar() {
+    if (extAnimando) {
+        return;
+    }
+    extAnimando = true;
+    extBloquearBotones(true);
+    try {
+        await llamarApi('/api/externo/reiniciar');
+        extMetodoActual = null;
+        await extRecargarEstado();
+        document.getElementById('extZonaOperaciones').hidden = true;
+        document.getElementById('extListaPasos').innerHTML = '';
+        document.getElementById('extVisualCubetas').innerHTML = '';
+        document.getElementById('extEstadoEstructura').textContent = '';
+        document.getElementById('extEstadoAnimacion').textContent = '';
+        document.getElementById('extMensaje').textContent = '';
+        document.getElementById('extMensaje').classList.remove('error', 'exito');
+        document.getElementById('extDigitos').value = '4';
+        document.getElementById('extNumCubetas').value = '4';
+        document.getElementById('extFilas').value = '1';
+        document.getElementById('extArchivoInput').value = '';
+        navegarA('vista-externas',
+            ['Algoritmos de búsqueda', 'Búsquedas externas']);
+    } catch (error) {
+        extMostrarMensaje('Error limpiando: ' + error.message, true);
+    } finally {
+        extAnimando = false;
+        extBloquearBotones(false);
+    }
+}
+
+/** Descarga la estructura externa actual como archivo JSON. */
+function extExportar() {
+    const est = extEstado.estructura || {};
+    if (!extEstado.seleccionHecha || !Array.isArray(est.cubetas)) {
+        extMostrarMensaje('No hay estructura externa que exportar: aplique la configuración primero.', true);
+        return;
+    }
+    const claves = [];
+    est.cubetas.forEach((cubeta) => {
+        (cubeta.datos || []).forEach((clave) => claves.push(clave));
+    });
+    const datos = {
+        version: 1,
+        digitos: extEstado.digitos,
+        metodo: extEstado.metodo,
+        filas: est.filas,
+        cubetasPorFila: est.cubetasPorFila,
+        claves: claves
+    };
+    const texto = JSON.stringify(datos, null, 2);
+    descargarArchivo('estructura.json', texto);
+    extMostrarMensaje('Estructura externa exportada: archivo "estructura.json" '
+        + 'descargado con ' + claves.length + ' clave(s).', false);
+}
+
+/** Abre el selector de archivo para cargar la estructura exportada. */
+function extCargar() {
+    document.getElementById('extArchivoInput').click();
+}
+
+/**
+ * Lee el archivo JSON elegido, reconstruye la configuración (filas y cifras)
+ * y reinserta todas las claves para restaurar las cubetas.
+ */
+async function extCargarArchivo(evento) {
+    const archivo = evento.target.files && evento.target.files[0];
+    if (!archivo) {
+        return;
+    }
+    try {
+        const contenido = await archivo.text();
+        const datos = JSON.parse(contenido);
+        const claves = datos.claves;
+        if (!Array.isArray(claves)) {
+            throw new Error('El archivo no contiene la lista "claves".');
+        }
+        const digitos = datos.digitos;
+        const filas = datos.filas;
+        const cubetasPorFila = datos.cubetasPorFila;
+        const metodo = datos.metodo;
+        let ruta = '/api/externo/cargar?digitos=' + encodeURIComponent(digitos)
+            + '&cubetasPorFila=' + encodeURIComponent(cubetasPorFila)
+            + '&filas=' + encodeURIComponent(filas)
+            + '&metodo=' + encodeURIComponent(metodo)
+            + '&claves=' + encodeURIComponent(claves.join(','));
+        const resultado = await llamarApi(ruta);
+        extMetodoActual = datos.metodo;
+        document.getElementById('extArchivoInput').value = '';
+        if (resultado.ok) {
+            document.getElementById('extTituloMetodo').textContent = datos.metodo;
+            document.getElementById('extZonaOperaciones').hidden = false;
+            await extRecargarEstado();
+            extMostrarMensaje(resultado.mensaje, false);
+        } else {
+            extMostrarMensaje(resultado.mensaje, true);
+        }
+    } catch (error) {
+        extMostrarMensaje('Archivo inválido: ' + error.message, true);
+        document.getElementById('extArchivoInput').value = '';
+    }
+}
+
+/** Dibuja la grilla de cubetas de la estructura externa. */
+function extDibujar() {
+    const estadoVisual = document.getElementById('extEstadoEstructura');
+    const visual = document.getElementById('extVisualCubetas');
+
+    const est = extEstado.estructura || {};
+    if (!extEstado.seleccionHecha) {
+        estadoVisual.textContent = 'Aún no hay método externo activo. Aplique la configuración.';
+        estadoVisual.classList.remove('error', 'exito');
+        visual.innerHTML = '';
+        return;
+    }
+    estadoVisual.textContent = 'Cubetas: ' + est.numCubetas
+        + ' (' + est.cubetasPorFila + ' por fila x ' + est.filas + ' fila(s))'
+        + ' | Claves: ' + est.cantidad
+        + ' | Capacidad base: ' + est.capacidadBase
+        + ' | Densidad: ' + (est.densidadExpansion * 100).toFixed(2) + '%.';
+    estadoVisual.classList.remove('error', 'exito');
+
+    visual.innerHTML = '';
+
+    const cubetas = est.cubetas || [];
+    const porFila = Math.max(1, est.cubetasPorFila || cubetas.length);
+    const filas = Math.max(1, est.filas || 1);
+
+    for (let f = 0; f < filas; f++) {
+        const grilla = document.createElement('div');
+        grilla.className = 'fila-celdas completa';
+        grilla.dataset.fila = f;
+        const desde = f * porFila;
+        const hasta = Math.min(cubetas.length, desde + porFila);
+        for (let i = desde; i < hasta; i++) {
+            grilla.appendChild(extCrearCubeta(cubetas[i]));
+        }
+        visual.appendChild(grilla);
+    }
+}
+
+function extCrearCubeta(cubeta) {
+    const celda = document.createElement('div');
+    celda.className = 'cubeta ' + (cubeta.cantidad > 0 ? 'ocupada' : 'vacia');
+    celda.dataset.indice = cubeta.indice;
+
+    const slot = (cubeta.capacidad || 1) > 0 ? (cubeta.capacidad || 1) : 1;
+    const ocupaSlot = cubeta.cantidad > 0 ? 1 : 0;
+
+    const etiqueta = document.createElement('span');
+    etiqueta.className = 'indice';
+    etiqueta.textContent = 'Cubeta ' + cubeta.indice
+        + ' (' + ocupaSlot + '/' + slot + ')';
+    celda.appendChild(etiqueta);
+
+    const datos = cubeta.datos || [];
+    if (datos.length === 0) {
+        const vacia = document.createElement('span');
+        vacia.className = 'valor';
+        vacia.textContent = '—';
+        celda.appendChild(vacia);
+    } else {
+        datos.forEach((clave, idx) => {
+            const chip = document.createElement('span');
+            chip.className = idx === 0 ? 'clave-ext' : 'clave-enlazada';
+            chip.textContent = clave;
+            celda.appendChild(chip);
+        });
+        if (datos.length > 1) {
+            const nota = document.createElement('span');
+            nota.className = 'indice nota-enlazada';
+            nota.textContent = '+' + (datos.length - 1) + ' enlazada(s)';
+            celda.appendChild(nota);
+        }
+    }
+    return celda;
+}
+
+// --- Eventos de búsquedas externas ---
+document.querySelectorAll('[data-externo]').forEach((boton) => {
+    boton.addEventListener('click', () => extAbrirMetodo(boton.dataset.externo));
+});
+document.getElementById('extBtnIniciar').addEventListener('click', extAplicar);
+document.getElementById('extBtnInsertar').addEventListener('click', () => extOperar('insertar'));
+document.getElementById('extBtnBuscar').addEventListener('click', () => extOperar('buscar'));
+document.getElementById('extBtnEliminar').addEventListener('click', () => extOperar('eliminar'));
+document.getElementById('extBtnReiniciar').addEventListener('click', extReiniciar);
+document.getElementById('extBtnExportar').addEventListener('click', extExportar);
+document.getElementById('extBtnCargar').addEventListener('click', extCargar);
+document.getElementById('extArchivoInput').addEventListener('change', extCargarArchivo);

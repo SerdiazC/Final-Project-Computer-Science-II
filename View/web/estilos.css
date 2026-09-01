@@ -841,3 +841,164 @@ button.mudo:hover {
 .vista[hidden] {
     display: none !important;
 }
+
+/* ================== BÚSQUEDAS EXTERNAS (CUBETAS) ================== */
+
+/* Nota junto al selector de dígitos de las búsquedas externas. */
+.nota-externo {
+    font-size: 0.82rem;
+    color: var(--texto-suave);
+    background: #eef8f8;
+    border: 1px solid var(--borde);
+    border-radius: 8px;
+    padding: 8px 12px;
+    align-self: center;
+}
+
+/* Cubeta (página) de la estructura externa: contiene varias claves enlazadas. */
+.cubeta {
+    min-width: 84px;
+    min-height: 62px;
+    border: 1px solid var(--borde);
+    border-radius: 8px;
+    background: #fbfcfe;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    padding: 6px;
+    font-size: 0.78rem;
+    color: var(--texto-suave);
+    transition: background 0.18s ease, border-color 0.18s ease,
+                box-shadow 0.18s ease, transform 0.18s ease;
+}
+
+.cubeta .indice {
+    font-size: 0.62rem;
+    color: #8fb0b6;
+    margin-bottom: 2px;
+}
+
+.cubeta.ocupada {
+    background: #d8f1ef;
+    border-color: #a8dfdc;
+}
+
+.cubeta.vacia .valor {
+    font-weight: 600;
+    color: #b9c6c9;
+}
+
+/* Clave individual dentro de una cubeta (espacio principal). */
+.clave-ext {
+    background: #b9e8cf;
+    color: #22704a;
+    border-radius: 6px;
+    padding: 1px 6px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    transition: background 0.18s ease, transform 0.18s ease;
+}
+
+/* Clave ENLAZADA: memoria encadenada que desborda la cubeta por colisión.
+   Se distingue visualmente del espacio principal (amarillo anaranjado). */
+.clave-enlazada {
+    background: #f4c98c;
+    color: #8a4b00;
+    border: 1px dashed #e0a14b;
+    border-radius: 6px;
+    padding: 1px 6px;
+    font-size: 0.68rem;
+    font-weight: 700;
+    transition: background 0.18s ease, transform 0.18s ease;
+}
+
+/* Nota que señala cuántas claves quedan encadenadas por colisión. */
+.cubeta .nota-enlazada {
+    font-size: 0.58rem;
+    color: #8a4b00;
+    margin-top: 2px;
+}
+
+/* Animación "comparando" sobre una cubeta. */
+.cubeta.comparando {
+    position: relative;
+    overflow: hidden;
+    background: #e9fbfa;
+    border-color: #3fbfba;
+    box-shadow: 0 0 0 3px rgba(63, 191, 186, 0.30);
+    animation: brilloSuave 0.6s ease-in-out infinite;
+}
+.cubeta.comparando::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(115deg,
+        transparent 25%, rgba(255, 255, 255, 0.9) 50%, transparent 75%);
+    transform: translateX(-130%);
+    animation: barridoLuz 0.55s ease forwards;
+}
+
+/* Cubeta ya descartada: queda tenue. */
+.cubeta.barrido {
+    background: #e8f1f2;
+    border-color: #d2e0e2;
+    opacity: 0.65;
+}
+
+/* Cubeta donde se halló la clave. */
+.cubeta.hallado {
+    position: relative;
+    background: #b9e8cf;
+    border-color: #35b97a;
+    box-shadow: 0 0 0 4px rgba(53, 185, 122, 0.30);
+    animation: destello 0.7s ease;
+}
+.cubeta.hallado::before,
+.cubeta.hallado::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 9px;
+    border: 2px solid rgba(53, 185, 122, 0.7);
+    animation: onda 1s ease-out 2;
+}
+.cubeta.hallado::after {
+    animation-delay: 0.3s;
+}
+
+/* Cubeta donde se presentó una colisión (quedan claves enlazadas). */
+.cubeta.colision {
+    position: relative;
+    background: #fde4de;
+    border-color: #ef8570;
+    box-shadow: 0 0 0 4px rgba(239, 133, 112, 0.35);
+    z-index: 1;
+    animation: pulsoColision 0.5s ease-in-out 4;
+}
+.cubeta.colision::after {
+    content: "¡Colisión!";
+    position: absolute;
+    top: -13px;
+    right: -8px;
+    background: var(--peligro);
+    color: #ffffff;
+    font-size: 0.58rem;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    padding: 2px 7px;
+    border-radius: 999px;
+    box-shadow: 0 2px 6px rgba(160, 60, 50, 0.4);
+    white-space: nowrap;
+}
+
+/* Cubeta recibiendo una clave recién insertada. */
+.cubeta.insertando {
+    background: #fff3cf;
+    border-color: #f0c04f;
+    position: relative;
+}
+.cubeta.insertando .clave-ext:last-child {
+    animation: estampar 0.7s cubic-bezier(0.18, 0.9, 0.32, 1.2);
+}
