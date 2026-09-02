@@ -170,6 +170,37 @@ function pintarMigas(migas) {
 }
 
 // ====================================================================
+// MENÚ DE NAVEGACIÓN SUPERIOR
+// ====================================================================
+
+/** Cierra todos los desplegables del menú superior. */
+function cerrarDesplegablesNav() {
+    document.querySelectorAll('.nav-desplegable.abierto')
+        .forEach((d) => {
+            d.classList.remove('abierto');
+            d.querySelector('.nav-disparador')
+                .setAttribute('aria-expanded', 'false');
+        });
+}
+
+/** Abre o cierra el desplegable indicado por su botón disparador. */
+function alternarDesplegableNav(disparador) {
+    const desplegable = disparador.closest('.nav-desplegable');
+    const estabaAbierto = desplegable.classList.contains('abierto');
+    cerrarDesplegablesNav();
+    if (!estabaAbierto) {
+        desplegable.classList.add('abierto');
+        disparador.setAttribute('aria-expanded', 'true');
+    }
+}
+
+/** Navega a una búsqueda desde el menú superior y cierra el menú. */
+function navegarDesdeNav(accion) {
+    cerrarDesplegablesNav();
+    accion();
+}
+
+// ====================================================================
 // APERTURA DE HOJAS (MÉTODOS DE BÚSQUEDA) Y PLACEHOLDERS
 // ====================================================================
 
@@ -957,6 +988,43 @@ function escapeHtml(texto) {
 // --- Navegación principal ---
 document.getElementById('btnMigaInicio').addEventListener('click', volverInicio);
 
+// --- Menú de navegación superior ---
+document.getElementById('navBtnInicio').addEventListener('click', () => {
+    cerrarDesplegablesNav();
+    volverInicio();
+});
+document.getElementById('navBtnInternas').addEventListener('click', (evento) => {
+    evento.stopPropagation();
+    alternarDesplegableNav(evento.currentTarget);
+});
+document.getElementById('navBtnExternas').addEventListener('click', (evento) => {
+    evento.stopPropagation();
+    alternarDesplegableNav(evento.currentTarget);
+});
+
+// Opciones internas del menú superior.
+document.getElementById('navOpLineal').addEventListener('click', () =>
+    navegarDesdeNav(() => abrirMetodo('LINEAL')));
+document.getElementById('navOpBinaria').addEventListener('click', () =>
+    navegarDesdeNav(() => abrirMetodo('BINARIA')));
+document.getElementById('navOpTransformacion').addEventListener('click', () =>
+    navegarDesdeNav(abrirTransformacion));
+document.getElementById('navOpArbolDigital').addEventListener('click', () =>
+    navegarDesdeNav(abrirArbolDigital));
+document.getElementById('navOpResiduos').addEventListener('click', () =>
+    navegarDesdeNav(() => abrirMetodo('ARBOL POR RESIDUOS')));
+
+// Opción externa del menú superior.
+document.getElementById('navOpExternasDinamicas').addEventListener('click', () =>
+    navegarDesdeNav(extAbrirDinamicas));
+
+// Cierra los desplegables al hacer clic en cualquier otra parte.
+document.addEventListener('click', (evento) => {
+    if (!evento.target.closest('.nav-desplegable')) {
+        cerrarDesplegablesNav();
+    }
+});
+
 document.getElementById('btnVerAlgoritmos').addEventListener('click', () => {
     navegarA('vista-algoritmos', ['Algoritmos de búsqueda']);
 });
@@ -1591,3 +1659,512 @@ document.getElementById('extBtnReiniciar').addEventListener('click', extReinicia
 document.getElementById('extBtnExportar').addEventListener('click', extExportar);
 document.getElementById('extBtnCargar').addEventListener('click', extCargar);
 document.getElementById('extArchivoInput').addEventListener('change', extCargarArchivo);
+
+// ====================================================================
+// ÁRBOL DIGITAL DE LETRAS (BÚSQUEDA POR RESIDUOS A-Z)
+// ====================================================================
+
+/** Estado de la última consulta /api/letras/estado. */
+let arbEstado = { seleccionHecha: false, estructura: {} };
+
+/** true mientras una animación del árbol de letras está en curso. */
+let arbAnimando = false;
+
+/** Límites del zoom manual del árbol. */
+const ARB_ESCALA_MIN = 0.05;
+const ARB_ESCALA_MAX = 3;
+
+/** true mientras el zoom queda en modo "Encajar" (auto-ajuste al espacio). */
+let arbZoomAuto = true;
+
+/** Factor de zoom manual vigente (usado si arbZoomAuto es false). */
+let arbEscala = 1;
+
+/** Recarga el estado del árbol de letras desde el servidor. */
+async function arbRecargarEstado() {
+    arbEstado = await llamarApi('/api/letras/estado');
+    arbPintarAviso();
+    arbActualizarResumen();
+    arbDibujar();
+    return arbEstado;
+}
+
+/** Lista las letras insertadas (recorrido en orden) en la tarjeta izquierda. */
+function arbActualizarResumen() {
+    const zona = document.getElementById('arbResumenLetras');
+    if (!zona) {
+        return;
+    }
+    const letras = [];
+    (function recorrer(nodo) {
+        if (!nodo) {
+            return;
+        }
+        if (nodo.izq) {
+            recorrer(nodo.izq);
+        }
+        if (nodo.letra) {
+            letras.push(nodo.letra);
+        }
+        if (nodo.der) {
+            recorrer(nodo.der);
+        }
+    })(arbEstado && arbEstado.estructura ? arbEstado.estructura.raiz : null);
+    zona.innerHTML = '';
+    if (!letras.length) {
+        zona.textContent = '(vacío)';
+        return;
+    }
+    letras.forEach((letra) => {
+        const chip = document.createElement('span');
+        chip.className = 'chip-letra';
+        chip.textContent = letra;
+        zona.appendChild(chip);
+    });
+}
+
+/** Abre la hoja del árbol digital de letras desde el menú de residuos. */
+function abrirArbolDigital() {
+    document.getElementById('arbLetra').value = '';
+    document.getElementById('arbMensaje').textContent =
+        'Digite una letra A-Z para insertarla, buscarla o eliminarla.';
+    document.getElementById('arbMensaje').classList.remove('error', 'exito');
+    document.getElementById('arbEstadoEstructura').textContent = '';
+    document.getElementById('arbEstadoAnimacion').textContent = '';
+    document.getElementById('arbVisualArbol').innerHTML = '';
+    document.getElementById('arbListaPasos').innerHTML = '';
+    document.getElementById('arbZoomEtiqueta').textContent = 'Encajar';
+    arbZoomAuto = true;
+    arbEscala = 1;
+
+    navegarA('vista-arboldigital',
+        ['Algoritmos de búsqueda', 'Búsquedas internas',
+            'Búsquedas por residuos', 'Árbol de búsqueda digital']);
+    arbRecargarEstado().catch((error) => {
+        arbMostrarMensaje('Error conectando con el servidor: ' + error.message, true);
+    });
+}
+
+/** Muestra un aviso en la hoja del árbol de letras. */
+function arbMostrarMensaje(texto, esError) {
+    const aviso = document.getElementById('arbMensaje');
+    aviso.textContent = texto;
+    aviso.classList.remove('error', 'exito');
+    aviso.classList.add(esError ? 'error' : 'exito');
+}
+
+/** Bloquea o habilita los botones del árbol de letras durante la animación. */
+function arbBloquearBotones(bloquear) {
+    ['arbBtnInsertar', 'arbBtnBuscar', 'arbBtnEliminar', 'arbBtnReiniciar'
+    ].forEach((id) => {
+        document.getElementById(id).disabled = bloquear;
+    });
+}
+
+/** Agrega una línea al registro de proceso del árbol de letras. */
+function arbAnadirLog(texto, esError) {
+    const contenedor = document.getElementById('arbListaPasos');
+    const div = document.createElement('div');
+    div.className = 'paso ' + (esError ? 'error' : 'encontrado');
+    div.innerHTML = '<span class="numero">' + (esError ? 'Error' : 'Hecho')
+        + '</span><span class="detalle">' + escapeHtml(texto) + '</span>';
+    contenedor.appendChild(div);
+    contenedor.scrollTop = contenedor.scrollHeight;
+}
+
+/**
+ * Lista los pasos de una inserción/eliminación de forma estática (sin
+ * animación) en el panel de proceso del árbol de letras.
+ */
+function arbLogEstatico(pasos) {
+    const contenedor = document.getElementById('arbListaPasos');
+    contenedor.innerHTML = '';
+    (pasos || []).forEach((paso) => {
+        const div = document.createElement('div');
+        div.className = 'paso';
+        div.innerHTML = '<span class="numero">Paso ' + paso.numero
+            + '</span><span class="detalle">' + escapeHtml(paso.descripcion)
+            + '</span>';
+        contenedor.appendChild(div);
+    });
+    contenedor.scrollTop = contenedor.scrollHeight;
+}
+
+/** Actualiza el aviso de estado del árbol de letras. */
+function arbPintarAviso() {
+    const aviso = document.getElementById('arbEstadoEstructura');
+    const cantidad = arbEstado.estructura.cantidad || 0;
+    aviso.textContent = cantidad === 0
+        ? 'El árbol está vacío: la primera letra digitada será la raíz.'
+        : 'Letras colocadas: ' + cantidad + ' de 26.';
+    aviso.classList.remove('error', 'exito');
+}
+
+/**
+ * Dibuja el árbol digital de letras COMO UN GRAFO dentro de un marco con
+ * zoom: cada nodo muestra su letra, posición y binario; los hijos quedan a
+ * la izquierda (bit 0) y a la derecha (bit 1) de su padre unidos por una
+ * LÍNEA. Si el árbol es más grande que el marco, se ENCAJA (reduce) para
+ * verlo completo; si el usuario lo acerca, el marco permite desplazarse.
+ *
+ * El trazado usa un recorrido inorden para las columnas x y la profundidad
+ * para la fila y; luego TODO el grafo se escala con un transform CSS para
+ * que las líneas y los nodos crezcan/encogan juntos.
+ */
+function arbDibujar() {
+    const visual = document.getElementById('arbVisualArbol');
+    visual.innerHTML = '';
+    const marco = document.getElementById('arbMarcoArbol');
+    const raiz = arbEstado.estructura.raiz;
+    if (!raiz) {
+        visual.textContent = '(árbol sin nodos: inserte la primera letra)';
+        document.getElementById('arbZoomEtiqueta').textContent = 'Encajar';
+        return;
+    }
+
+    const AN = 110; // ancho del nodo
+    const X_PASO = 150; // separación horizontal entre columnas
+    const Y_PASO = 120; // separación vertical entre profundidades
+    const PAD = 55;
+    const altoNodo = 66;
+
+    // 1) Calcular la posición de cada nodo: x = índice inorden, y = profundidad.
+    const posiciones = [];
+    let contadorX = 0;
+    let maxProfundidad = 0;
+    (function recorrer(nodo, profundidad) {
+        if (!nodo) {
+            return;
+        }
+        if (nodo.izq) {
+            recorrer(nodo.izq, profundidad + 1);
+        }
+        posiciones.push({ nodo, x: contadorX, y: profundidad });
+        contadorX++;
+        maxProfundidad = Math.max(maxProfundidad, profundidad);
+        if (nodo.der) {
+            recorrer(nodo.der, profundidad + 1);
+        }
+    })(raiz, 0);
+
+    const ancho = PAD * 2 + (contadorX - 1) * X_PASO + AN;
+    const alto = PAD * 2 + maxProfundidad * Y_PASO + altoNodo;
+
+    // 2) Escala vigente: "Encajar" reduce para que quepa; manual respeta.
+    const escala = arbObtenerEscala(marco, ancho, alto);
+    arbActualizarControlZoom(escala);
+
+    const grafo = document.createElement('div');
+    grafo.className = 'arbol-grafo';
+    grafo.style.width = ancho + 'px';
+    grafo.style.height = alto + 'px';
+
+    // 3) SVG con las aristas (detrás de los nodos).
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('class', 'arbol-lineas');
+    svg.setAttribute('width', ancho);
+    svg.setAttribute('height', alto);
+
+    const porNodo = new Map();
+    posiciones.forEach((pos) => porNodo.set(pos.nodo, pos));
+
+    const centroX = (pos) => PAD + pos.x * X_PASO + AN / 2;
+    const centroY = (pos) => PAD + pos.y * Y_PASO + altoNodo / 2;
+
+    posiciones.forEach((pos) => {
+        [['izq', '0'], ['der', '1']].forEach((par) => {
+            const campo = par[0];
+            const bit = par[1];
+            const hijo = pos.nodo[campo];
+            const posHijo = porNodo.get(hijo);
+            if (!posHijo) {
+                return;
+            }
+            const x1 = centroX(pos);
+            const y1 = centroY(pos);
+            const x2 = centroX(posHijo);
+            const y2 = centroY(posHijo);
+
+            const linea = document.createElementNS(
+                'http://www.w3.org/2000/svg', 'line');
+            linea.setAttribute('class', 'arbol-lado '
+                + (bit === '0' ? 'lado0' : 'lado1'));
+            linea.setAttribute('x1', x1);
+            linea.setAttribute('y1', y1);
+            linea.setAttribute('x2', x2);
+            linea.setAttribute('y2', y2);
+            svg.appendChild(linea);
+
+            const etiqueta = document.createElementNS(
+                'http://www.w3.org/2000/svg', 'text');
+            etiqueta.setAttribute('class', 'arbol-bit '
+                + (bit === '0' ? 'bit0' : 'bit1'));
+            etiqueta.setAttribute('x', (x1 + x2) / 2);
+            etiqueta.setAttribute('y', (y1 + y2) / 2 - 5);
+            etiqueta.textContent = bit;
+            svg.appendChild(etiqueta);
+        });
+    });
+
+    grafo.appendChild(svg);
+
+    // 4) Nodos posicionados sobre sus coordenadas.
+    posiciones.forEach((pos) => {
+        const nodoDom = arbConstruirNodo(pos.nodo);
+        nodoDom.style.left = (PAD + pos.x * X_PASO) + 'px';
+        nodoDom.style.top = (PAD + pos.y * Y_PASO) + 'px';
+        grafo.appendChild(nodoDom);
+    });
+
+    // 5) Envoltorio de zoom: escala el grafo y centra si sobra espacio.
+    const zoom = document.createElement('div');
+    zoom.className = 'arbol-zoom';
+    zoom.style.width = Math.round(ancho * escala) + 'px';
+    zoom.style.height = Math.round(alto * escala) + 'px';
+    zoom.style.transform = 'scale(' + escala + ')';
+
+    const anchoMarco = Math.max(marco.clientWidth || 600, 100);
+    const altoMarco = Math.max(marco.clientHeight || 500, 100);
+    const sobraX = Math.max(0, Math.round((anchoMarco - ancho * escala) / 2));
+    const sobraY = Math.max(0, Math.round((altoMarco - alto * escala) / 2));
+    zoom.style.marginLeft = sobraX + 'px';
+    zoom.style.marginTop = sobraY + 'px';
+
+    zoom.appendChild(grafo);
+    visual.appendChild(zoom);
+}
+
+/**
+ * Devuelve la escala de dibujo: en modo "Encajar" calcula la que permite
+ * ver el árbol completo dentro del marco; en modo manual devuelve la que el
+ * usuario fijó (siempre recortada a los límites permitidos).
+ */
+function arbObtenerEscala(marco, ancho, alto) {
+    let escala;
+    if (arbZoomAuto) {
+        const anchoMarco = Math.max(marco.clientWidth || 600, 100) - 28;
+        const altoMarco = Math.max(marco.clientHeight || 500, 100) - 28;
+        escala = Math.min(anchoMarco / ancho, altoMarco / alto, 1.25);
+    } else {
+        escala = arbEscala;
+    }
+    escala = Math.max(ARB_ESCALA_MIN,
+        Math.min(ARB_ESCALA_MAX, escala));
+    arbEscala = escala;
+    return escala;
+}
+
+/** Muestra el porcentaje de zoom vigente en el control. */
+function arbActualizarControlZoom(escala) {
+    const etiqueta = document.getElementById('arbZoomEtiqueta');
+    if (etiqueta) {
+        etiqueta.textContent = Math.round(escala * 100) + ' %';
+    }
+}
+
+/** Aleja el árbol un 20 % y sale del modo "Encajar". */
+function arbZoomMenos() {
+    arbZoomAuto = false;
+    arbEscala = Math.max(ARB_ESCALA_MIN,
+        Math.round(arbEscala * 0.8 * 100) / 100);
+    arbDibujar();
+}
+
+/** Acerca el árbol un 25 % y sale del modo "Encajar". */
+function arbZoomMas() {
+    arbZoomAuto = false;
+    arbEscala = Math.min(ARB_ESCALA_MAX,
+        Math.round(arbEscala * 1.25 * 100) / 100);
+    arbDibujar();
+}
+
+/** Vuelve al modo "Encajar": el árbol siempre cabe completo en el marco. */
+function arbZoomEncajar() {
+    arbZoomAuto = true;
+    arbDibujar();
+}
+
+/** Construye el nodo visible del árbol de letras (sin layout). */
+function arbConstruirNodo(nodo) {
+    const caja = document.createElement('div');
+    caja.className = 'nodoletras ' + (nodo.vacio ? 'vacio' : '');
+    caja.dataset.letra = nodo.vacio ? '' : nodo.letra;
+    caja.innerHTML = '<span class="letragrande">'
+        + (nodo.vacio ? '&mdash;' : escapeHtml(nodo.letra)) + '</span>'
+        + (nodo.vacio ? '' : '<br><span class="infodig">pos '
+            + nodo.posicion + ' · bin ' + escapeHtml(nodo.binario) + '</span>');
+    return caja;
+}
+
+/** Localiza el nodo visible del árbol de letras por su letra. */
+function arbUbicarNodo(letra) {
+    return document.querySelector(
+        '#arbVisualArbol .nodoletras[data-letra="' + letra + '"]');
+}
+
+/**
+ * Reproduce la búsqueda de una letra animada: ilumina cada nodo visitado y
+ * registra el detalle en el panel derecho.
+ */
+async function arbAnimarBusqueda(pasos, encontrada, letra) {
+    const pasosLog = document.getElementById('arbListaPasos');
+    pasosLog.innerHTML = '';
+
+    let previo = null;
+    for (const paso of pasos) {
+        if (previo) {
+            previo.classList.remove('comparando');
+            previo.classList.add('barrido');
+        }
+        document.getElementById('arbEstadoAnimacion').textContent =
+            'Paso ' + paso.numero + ': ' + paso.descripcion;
+        const nodo = paso.letra ? arbUbicarNodo(paso.letra) : null;
+        if (nodo) {
+            nodo.classList.add('comparando');
+            nodo.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            previo = nodo;
+        } else {
+            previo = null;
+        }
+        const div = document.createElement('div');
+        div.className = 'paso';
+        div.innerHTML = '<span class="numero">Paso ' + paso.numero
+            + '</span><span class="detalle">' + escapeHtml(paso.descripcion)
+            + '</span>';
+        pasosLog.appendChild(div);
+        pasosLog.scrollTop = pasosLog.scrollHeight;
+        await new Promise((resolver) => setTimeout(resolver, 520));
+    }
+    if (previo) {
+        previo.classList.remove('comparando');
+    }
+
+    if (encontrada) {
+        const hallado = arbUbicarNodo(letra);
+        if (hallado) {
+            hallado.classList.remove('comparando', 'barrido');
+            hallado.classList.add('hallado');
+            hallado.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            setTimeout(() => hallado.classList.remove('hallado'), 2200);
+        }
+    }
+    document.getElementById('arbEstadoAnimacion').textContent = '';
+}
+
+/** Resalta brevemente el nodo que acaba de insertarse o eliminarse. */
+function arbResaltar(letra) {
+    const nodo = arbUbicarNodo(letra) || document
+        .querySelector('#arbVisualArbol .nodoletras.vacio');
+    if (!nodo) {
+        return;
+    }
+    nodo.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    nodo.classList.add('insertando');
+    setTimeout(() => nodo.classList.remove('insertando'), 1200);
+}
+
+/** Operación genérica del árbol de letras (insertar/buscar/eliminar). */
+async function arbOperar(operacion) {
+    if (arbAnimando) {
+        return;
+    }
+    const valor = document.getElementById('arbLetra').value.trim();
+    if (!/^[a-zA-Z]$/.test(valor)) {
+        arbMostrarMensaje('Digite una sola letra A-Z.', true);
+        return;
+    }
+    const letra = valor.toUpperCase();
+
+    arbAnimando = true;
+    arbBloquearBotones(true);
+    try {
+        const ruta = '/api/letras/' + operacion + '?letra=' + letra;
+        const resultado = await llamarApi(ruta);
+
+        if (operacion === 'buscar') {
+            await arbRecargarEstado();
+            await arbAnimarBusqueda(resultado.pasos || [], resultado.encontrada, letra);
+            arbAnadirLog(resultado.mensaje, !resultado.encontrada);
+            arbMostrarMensaje(resultado.mensaje, !resultado.encontrada);
+        } else {
+            document.getElementById('arbListaPasos').innerHTML = '';
+            if (!resultado.ok) {
+                arbAnadirLog(resultado.mensaje, true);
+                arbMostrarMensaje(resultado.mensaje, true);
+                return;
+            }
+            await arbRecargarEstado();
+            arbLogEstatico(resultado.pasos);
+            arbResaltar(letra);
+            arbAnadirLog(resultado.mensaje, false);
+            arbMostrarMensaje(resultado.mensaje, false);
+        }
+    } catch (error) {
+        arbMostrarMensaje('Error conectando con el servidor: ' + error.message, true);
+    } finally {
+        arbAnimando = false;
+        arbBloquearBotones(false);
+    }
+}
+
+/** Limpia el árbol de letras y deja la hoja operativa de nuevo. */
+async function arbReiniciar() {
+    if (arbAnimando) {
+        return;
+    }
+    arbAnimando = true;
+    arbBloquearBotones(true);
+    try {
+        const resultado = await llamarApi('/api/letras/reiniciar');
+        await arbRecargarEstado();
+        document.getElementById('arbLetra').value = '';
+        document.getElementById('arbListaPasos').innerHTML = '';
+        document.getElementById('arbEstadoAnimacion').textContent = '';
+        arbMostrarMensaje(resultado.mensaje, false);
+    } catch (error) {
+        arbMostrarMensaje('Error limpiando: ' + error.message, true);
+    } finally {
+        arbAnimando = false;
+        arbBloquearBotones(false);
+    }
+}
+
+// --- Eventos del árbol digital de letras ---
+document.getElementById('btnVerArbolDigitalLetras').addEventListener('click', abrirArbolDigital);
+document.getElementById('arbBtnInsertar').addEventListener('click', () => arbOperar('insertar'));
+document.getElementById('arbBtnBuscar').addEventListener('click', () => arbOperar('buscar'));
+document.getElementById('arbBtnEliminar').addEventListener('click', () => arbOperar('eliminar'));
+document.getElementById('arbBtnReiniciar').addEventListener('click', arbReiniciar);
+document.getElementById('arbLetra').addEventListener('keydown', (evento) => {
+    if (evento.key === 'Enter') {
+        arbOperar('insertar');
+    }
+});
+document.getElementById('arbLetra').addEventListener('input', (evento) => {
+    evento.target.value = evento.target.value
+        .replace(/[^a-zA-Z]/g, '').slice(0, 1).toUpperCase();
+});
+
+// --- Zoom del árbol digital de letras ---
+document.getElementById('arbZoomMenos').addEventListener('click', arbZoomMenos);
+document.getElementById('arbZoomMas').addEventListener('click', arbZoomMas);
+document.getElementById('arbZoomEncajar').addEventListener('click', arbZoomEncajar);
+const arbMarco = document.getElementById('arbMarcoArbol');
+arbMarco.addEventListener('wheel', (evento) => {
+    if (!evento.ctrlKey) {
+        return;
+    }
+    evento.preventDefault();
+    arbZoomAuto = false;
+    if (evento.deltaY < 0) {
+        arbEscala = Math.min(ARB_ESCALA_MAX,
+            Math.round(arbEscala * 1.15 * 100) / 100);
+    } else {
+        arbEscala = Math.max(ARB_ESCALA_MIN,
+            Math.round(arbEscala * 0.87 * 100) / 100);
+    }
+    arbDibujar();
+}, { passive: false });
+arbMarco.addEventListener('dblclick', () => {
+    arbZoomEncajar();
+});

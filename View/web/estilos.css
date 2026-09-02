@@ -40,15 +40,151 @@ body {
 .encabezado {
     background: linear-gradient(135deg, #3ec7c0, #0f9f9c);
     color: #ffffff;
-    padding: 24px 40px;
-    text-align: center;
+    padding: 18px 40px;
     box-shadow: var(--sombra);
+    position: sticky;
+    top: 0;
+    z-index: 1000;
+}
+
+.encabezado-inner {
+    max-width: 1360px;
+    margin: 0 auto;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 14px 24px;
 }
 
 .encabezado h1 {
-    font-size: 1.8rem;
+    font-size: 1.55rem;
     letter-spacing: 0.3px;
+    flex: 1 1 auto;
 }
+
+/* ---------- Menú de navegación superior ---------- */
+.nav-superior {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.nav-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: rgba(255, 255, 255, 0.14);
+    color: #ffffff;
+    border: 1px solid rgba(255, 255, 255, 0.28);
+    border-radius: 999px;
+    padding: 9px 16px;
+    font-family: inherit;
+    font-size: 0.92rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s ease, transform 0.1s ease, box-shadow 0.2s ease;
+}
+
+.nav-item:hover,
+.nav-item:focus-visible {
+    background: rgba(255, 255, 255, 0.28);
+    outline: none;
+}
+
+.nav-item:active {
+    transform: scale(0.97);
+}
+
+.nav-icono {
+    font-size: 1.05rem;
+    line-height: 1;
+}
+
+.nav-flecha {
+    font-size: 0.8rem;
+    opacity: 0.85;
+    transition: transform 0.2s ease;
+}
+
+.nav-desplegable {
+    position: relative;
+}
+
+.nav-desplegable.abierto .nav-flecha {
+    transform: rotate(180deg);
+}
+
+.nav-desplegable.abierto .nav-disparador {
+    background: rgba(255, 255, 255, 0.32);
+}
+
+/* Panel desplegable: tarjeta clara, coherente con la paleta de la página. */
+.nav-menu {
+    display: none;
+    position: absolute;
+    top: calc(100% + 10px);
+    left: 0;
+    min-width: 270px;
+    background: var(--tarjeta);
+    color: var(--texto);
+    border: 1px solid var(--borde);
+    border-radius: var(--radio);
+    box-shadow: 0 14px 34px rgba(15, 60, 70, 0.18);
+    padding: 10px;
+    z-index: 1001;
+    flex-direction: column;
+    animation: nav-aparecer 0.16s ease-out;
+}
+
+.nav-desplegable.abierto .nav-menu {
+    display: flex;
+}
+
+@keyframes nav-aparecer {
+    from { opacity: 0; transform: translateY(-6px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+.nav-opcion {
+    display: block;
+    width: 100%;
+    text-align: left;
+    background: transparent;
+    border: none;
+    border-radius: 9px;
+    padding: 10px 12px;
+    font-family: inherit;
+    font-size: 0.92rem;
+    color: var(--texto);
+    cursor: pointer;
+    transition: background 0.15s ease, color 0.15s ease;
+}
+
+.nav-opcion:hover {
+    background: #e6f5f4;
+    color: var(--acento-oscuro);
+}
+
+.nav-subtitulo {
+    display: block;
+    padding: 8px 12px 4px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    color: var(--texto-suave);
+}
+
+.nav-separador {
+    height: 1px;
+    background: var(--borde);
+    margin: 6px 4px;
+}
+
+/* Cierra cualquier menú abierto al hacer clic fuera. */
+
 
 /* ---------- Contenido ---------- */
 .contenido {
@@ -180,6 +316,7 @@ body {
 }
 
 input[type="number"],
+input[type="text"],
 select {
     padding: 9px 12px;
     border: 1px solid var(--borde);
@@ -192,6 +329,7 @@ select {
 }
 
 input[type="number"]:focus,
+input[type="text"]:focus,
 select:focus {
     border-color: var(--acento);
 }
@@ -369,16 +507,145 @@ button.mudo:hover {
     align-items: flex-start;
 }
 
+/*
+ * Variante del ÁRBOL DE LETRAS: dos tarjetas juntas arriba ("Árbol activo" a
+ * la izquierda y "Proceso de la operación" a la derecha) y el MARCO del árbol
+ * a todo el ancho debajo, de modo que el grafo queda completamente despejado.
+ */
+.arbol-cabecera {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: stretch;
+    gap: 14px;
+    margin-top: 14px;
+}
+
+.arbol-cabecera h3 {
+    font-size: 1rem;
+    color: var(--texto);
+    border-bottom: 2px solid var(--fondo);
+    padding-bottom: 8px;
+    margin-bottom: 4px;
+}
+
+/* Tarjetas gemelas: árbol activo (izquierda) y proceso (derecha). */
+.arbol-cabecera .arbol-panel {
+    flex: 1 1 0;
+    min-width: 260px;
+    background: #ffffff;
+    border: 1px solid var(--borde);
+    border-radius: 12px;
+    padding: 12px 14px;
+}
+
+.arbol-cabecera .arbol-panel:first-child {
+    display: flex;
+    flex-direction: column;
+}
+
+.arbol-cabecera .arbol-controles {
+    margin-top: 8px;
+}
+
+/* Leyenda de colores de las aristas, al pie de la tarjeta "Árbol activo". */
+.arbol-leyenda {
+    margin-top: auto;
+    padding-top: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 0.8rem;
+    color: var(--texto);
+}
+
+/* Resumen de letras insertadas: chips que completan la tarjeta de la izquierda. */
+.arbol-resumen {
+    margin-top: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    font-size: 0.8rem;
+    color: var(--texto);
+    background: #f6f9fa;
+    border: 1px dashed var(--borde);
+    border-radius: 10px;
+    padding: 10px 12px;
+    min-height: 84px;
+}
+
+.arbol-resumen-nombre {
+    font-weight: 700;
+}
+
+.arbol-resumen-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    align-content: flex-start;
+}
+
+.arbol-resumen-chips .chip-letra {
+    background: #ffffff;
+    border: 1px solid var(--borde);
+    border-radius: 999px;
+    padding: 2px 10px;
+    font-weight: 700;
+    font-size: 0.85rem;
+    color: var(--acento-oscuro);
+}
+
+.leyenda-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.leyenda-bit {
+    width: 26px;
+    height: 12px;
+    border-radius: 4px;
+    display: inline-block;
+}
+
+.leyenda-bit.bit0 {
+    background: #1e7a4f;
+}
+
+.leyenda-bit.bit1 {
+    background: #c15b1c;
+}
+
+/* El panel de proceso deja de flotar sobre el grafo; va como tarjeta normal. */
+.arbol-cabecera .columna-proceso {
+    position: static;
+}
+
+.arbol-cabecera .lista-pasos {
+    height: min(46vh, 400px);
+    max-height: min(46vh, 400px);
+}
+
+.piloto.piloto-arbol {
+    margin-top: 14px;
+}
+
+.piloto.piloto-arbol .arbol-marco {
+    margin-top: 0;
+    width: 100%;
+    height: min(680px, 70vh);
+    min-height: 440px;
+}
+
 .piloto .columna {
     min-width: 0;
 }
 
 .columna-estructura {
-    flex: 1 1 62%;
+    flex: 2 1 68%;
 }
 
 .columna-proceso {
-    flex: 1 1 38%;
+    flex: 1 1 32%;
     position: sticky;
     top: 16px;
 }
@@ -395,12 +662,33 @@ button.mudo:hover {
     .piloto {
         flex-direction: column;
     }
+    .arbol-cabecera {
+        flex-direction: column;
+    }
+    .arbol-cabecera .arbol-panel {
+        flex-basis: auto;
+        min-width: 0;
+    }
     .columna-proceso {
         position: static;
     }
     .lista-pasos {
         height: 220px;
         max-height: 220px;
+    }
+    .piloto.piloto-arbol .arbol-marco {
+        height: min(560px, 62vh);
+    }
+
+    /* Menú superior: se alinea a la izquierda y los paneles se ajustan. */
+    .encabezado {
+        padding: 14px 20px;
+    }
+    .encabezado-inner {
+        justify-content: flex-start;
+    }
+    .nav-menu {
+        min-width: 240px;
     }
 }
 
@@ -809,6 +1097,218 @@ button.mudo:hover {
     background: #e8f1f2;
     border-radius: 6px;
     padding: 2px 8px;
+}
+
+/* ---------- Árbol digital de letras (A-Z) ---------- */
+/* Controles de zoom: alejar, porcentaje, acercar y encajar. */
+.arbol-controles {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-top: 10px;
+    flex-wrap: wrap;
+}
+
+.arbol-controles .zoom-boton {
+    min-width: 40px;
+    padding: 8px 14px;
+    text-align: center;
+    line-height: 1;
+}
+
+.arbol-controles .zoom-etiqueta {
+    display: inline-block;
+    min-width: 64px;
+    text-align: center;
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--texto);
+    background: #eef4f6;
+    border-radius: 999px;
+    padding: 8px 10px;
+}
+
+/* Marco donde vive el grafo: espacio fijo, con scroll cuando se acerca. */
+.arbol-marco {
+    margin-top: 10px;
+    padding: 14px;
+    border: 1px solid var(--borde);
+    border-radius: 12px;
+    background-color: #f8fafc;
+    background-image:
+        linear-gradient(rgba(110, 130, 150, 0.06) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(110, 130, 150, 0.06) 1px, transparent 1px);
+    background-size: 24px 24px;
+    height: min(640px, 66vh);
+    min-height: 420px;
+    overflow: auto;
+}
+
+.arbol-contenido {
+    min-width: 100%;
+    min-height: 100%;
+}
+
+/* Envoltorio del grafo que se escala con transform (origen arriba-izquierda). */
+.arbol-zoom {
+    transform-origin: top left;
+}
+
+/* Contenedor tipo GRAFO: los nodos se posicionan en coordenadas y las
+   aristas se dibujan con SVG. */
+.arbol-grafo {
+    position: relative;
+    display: block;
+}
+
+.arbol-lineas {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+}
+
+/* Arista: izquierda (bit 0) verde / derecha (bit 1) naranja. */
+.arbol-lado {
+    stroke-width: 2.5px;
+    stroke-linecap: round;
+}
+.arbol-lado.lado0 { stroke: #4fb492; }
+.arbol-lado.lado1 { stroke: #e08641; }
+
+/* Etiqueta del bit sobre la arista. */
+.arbol-bit {
+    font-size: 12px;
+    font-weight: 700;
+    text-anchor: middle;
+    paint-order: stroke;
+    stroke: #ffffff;
+    stroke-width: 4px;
+}
+.arbol-bit.bit0 { fill: #1e7a4f; }
+.arbol-bit.bit1 { fill: #c15b1c; }
+
+.nodoletras {
+    background: #e3e9fb;
+    border: 2px solid #b7c6f0;
+    border-radius: 14px;
+    padding: 10px 16px;
+    text-align: center;
+    min-width: 96px;
+    box-shadow: 0 2px 6px rgba(80, 100, 180, 0.12);
+    transition: background 0.18s ease, border-color 0.18s ease;
+}
+
+/* Dentro del grafo los nodos se colocan en coordenadas absolutas. */
+.arbol-grafo .nodoletras {
+    position: absolute;
+    width: 110px;
+    box-sizing: border-box;
+    z-index: 1;
+}
+
+.nodoletras .letragrande {
+    font-weight: 800;
+    font-size: 1.5rem;
+    line-height: 1.1;
+    color: #3a4f9e;
+}
+
+.nodoletras .infodig {
+    display: inline-block;
+    margin-top: 4px;
+    font-size: 0.62rem;
+    color: #6b78a5;
+    background: rgba(255, 255, 255, 0.6);
+    border-radius: 999px;
+    padding: 2px 8px;
+}
+
+.nodoletras.vacio {
+    background: #eef5f6;
+    border-style: dashed;
+    border-color: var(--borde);
+}
+
+.nodoletras.vacio .letragrande {
+    color: var(--texto-suave);
+}
+
+/* Etiquetas de arista: bit 0 (verde) / bit 1 (naranja). */
+.rama .etiqueta.bit0 {
+    background: #d6f2e3;
+    color: #1e7a4f;
+    font-weight: 700;
+}
+
+.rama .etiqueta.bit1 {
+    background: #ffe9d6;
+    color: #c15b1c;
+    font-weight: 700;
+}
+
+/* Nodo comparado durante la búsqueda. */
+.nodoletras.comparando {
+    position: relative;
+    overflow: hidden;
+    background: #e9fbfa;
+    border-color: #3fbfba;
+    box-shadow: 0 0 0 3px rgba(63, 191, 186, 0.30);
+    animation: brilloSuave 0.6s ease-in-out infinite;
+}
+.nodoletras.comparando::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(115deg,
+        transparent 25%, rgba(255, 255, 255, 0.9) 50%, transparent 75%);
+    transform: translateX(-130%);
+    animation: barridoLuz 0.55s ease forwards;
+}
+
+/* Nodo ya descartado: queda tenue. */
+.nodoletras.barrido {
+    background: #e8f1f2;
+    border-color: #d2e0e2;
+    opacity: 0.65;
+}
+
+/* Nodo donde se halló la letra. */
+.nodoletras.hallado {
+    position: relative;
+    background: #b9e8cf;
+    border-color: #35b97a;
+    box-shadow: 0 0 0 4px rgba(53, 185, 122, 0.30);
+    animation: destello 0.7s ease;
+}
+.nodoletras.hallado::before,
+.nodoletras.hallado::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 14px;
+    border: 2px solid rgba(53, 185, 122, 0.7);
+    animation: onda 1s ease-out 2;
+}
+.nodoletras.hallado::after {
+    animation-delay: 0.3s;
+}
+
+/* Nodo que acaba de insertarse / vaciarse. */
+.nodoletras.insertando {
+    background: #fff3cf;
+    border-color: #f0c04f;
+    position: relative;
+}
+.nodoletras.insertando .letragrande {
+    display: inline-block;
+    animation: estampar 0.7s cubic-bezier(0.18, 0.9, 0.32, 1.2);
+}
+
+/* Los estados animados NO deben sacar al nodo de su coordenada del grafo. */
+.arbol-grafo .nodoletras.comparando,
+.arbol-grafo .nodoletras.hallado,
+.arbol-grafo .nodoletras.insertando {
+    position: absolute;
 }
 
 /* ---------- Navegación (migas) ---------- */

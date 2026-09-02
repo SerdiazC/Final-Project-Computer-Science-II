@@ -9,7 +9,47 @@
 <body>
 
 <header class="encabezado">
-    <h1>Ciencias de la Computación II</h1>
+    <div class="encabezado-inner">
+        <h1>Ciencias de la Computación II</h1>
+
+        <nav class="nav-superior" id="navSuperior" aria-label="Navegación principal">
+            <button class="nav-item" id="navBtnInicio">
+                <span class="nav-icono">⌂</span>
+                <span class="nav-texto">Inicio</span>
+            </button>
+
+            <div class="nav-desplegable">
+                <button class="nav-item nav-disparador" id="navBtnInternas"
+                        aria-haspopup="true" aria-expanded="false">
+                    <span class="nav-icono">◈</span>
+                    <span class="nav-texto">Búsquedas internas</span>
+                    <span class="nav-flecha">▾</span>
+                </button>
+                <div class="nav-menu" role="menu">
+                    <button class="nav-opcion" id="navOpLineal">Búsqueda lineal</button>
+                    <button class="nav-opcion" id="navOpBinaria">Búsqueda binaria</button>
+                    <button class="nav-opcion" id="navOpTransformacion">Transformación de claves</button>
+                    <div class="nav-separador"></div>
+                    <span class="nav-subtitulo">Búsquedas por residuos</span>
+                    <button class="nav-opcion" id="navOpArbolDigital">Árbol de búsqueda digital</button>
+                    <button class="nav-opcion" id="navOpResiduos">Árbol por residuos</button>
+                </div>
+            </div>
+
+            <div class="nav-desplegable">
+                <button class="nav-item nav-disparador" id="navBtnExternas"
+                        aria-haspopup="true" aria-expanded="false">
+                    <span class="nav-icono">▤</span>
+                    <span class="nav-texto">Búsquedas externas</span>
+                    <span class="nav-flecha">▾</span>
+                </button>
+                <div class="nav-menu" role="menu">
+                    <button class="nav-opcion" id="navOpExternasDinamicas">
+                        Búsquedas externas dinámicas</button>
+                </div>
+            </div>
+        </nav>
+    </div>
 </header>
 
 <main class="contenido">
@@ -55,7 +95,7 @@
     <section class="vista-menu vista" id="vista-residuos" hidden>
         <h2>Búsquedas por residuos</h2>
         <div class="grid-principal">
-            <button class="boton-grande" data-metodo="ARBOL DIGITAL">Árbol de búsqueda digital</button>
+            <button class="boton-grande" id="btnVerArbolDigitalLetras">Árbol de búsqueda digital</button>
             <button class="boton-grande" data-metodo="ARBOL POR RESIDUOS">Árbol de búsqueda por residuos</button>
             <button class="boton-grande mudo" id="btnVerResiduosMultiples">Árbol de búsqueda por residuos múltiples</button>
         </div>
@@ -253,6 +293,68 @@
         </div>
 
         <button class="btn-volver" data-volver="vista-externas">← Volver</button>
+    </section>
+
+    <!-- ============ VISTA: ÁRBOL DIGITAL DE LETRAS (HOJA) ============ -->
+    <section class="tarjeta vista" id="vista-arboldigital" hidden>
+        <h2>Árbol de búsqueda digital</h2>
+        <p class="ayuda" id="arbAyuda">
+            Sin tamaño ni cifras configurables: digite una letra A-Z. Se
+            ubica según los bits (0 izquierda / 1 derecha) de su posición
+            en el alfabeto (A=1, B=2, ..., Z=26), usando SIEMPRE 5 cifras
+            binarias: las posiciones cortas se rellenan con 0 al inicio
+            (A=00001, C=00011, ..., Z=11010). La primera letra es la raíz.
+        </p>
+
+        <div id="arbZonaOperaciones">
+            <div class="fila">
+                <label>
+                    Letra (A-Z)
+                    <input type="text" id="arbLetra" maxlength="1" autocomplete="off">
+                </label>
+                <button id="arbBtnInsertar">Insertar</button>
+                <button id="arbBtnBuscar" class="principal">Buscar</button>
+                <button id="arbBtnEliminar" class="peligro">Eliminar</button>
+            </div>
+            <div id="arbMensaje" class="aviso"></div>
+            <div class="fila estructura-fila">
+                <button id="arbBtnReiniciar" class="peligro">Limpiar y empezar de cero</button>
+            </div>
+
+            <div class="arbol-cabecera">
+                <div class="arbol-panel">
+                    <h3>Árbol activo</h3>
+                    <div id="arbEstadoEstructura" class="aviso"></div>
+                    <div id="arbEstadoAnimacion" class="estado-animacion"></div>
+                    <div class="arbol-controles">
+                        <button id="arbZoomMenos" class="gris zoom-boton" title="Alejar (Ctrl + rueda)">−</button>
+                        <span id="arbZoomEtiqueta" class="zoom-etiqueta">Encajar</span>
+                        <button id="arbZoomMas" class="gris zoom-boton" title="Acercar (Ctrl + rueda)">+</button>
+                        <button id="arbZoomEncajar" title="Ajustar el árbol al espacio disponible">Encajar</button>
+                    </div>
+                    <div class="arbol-resumen">
+                        <span class="arbol-resumen-nombre">Letras insertadas</span>
+                        <span class="arbol-resumen-chips" id="arbResumenLetras">(vacío)</span>
+                    </div>
+                    <div class="arbol-leyenda">
+                        <span class="leyenda-item"><i class="leyenda-bit bit0"></i>0 &rarr; izquierda</span>
+                        <span class="leyenda-item"><i class="leyenda-bit bit1"></i>1 &rarr; derecha</span>
+                    </div>
+                </div>
+                <div class="arbol-panel columna-proceso">
+                    <h3>Proceso de la operación</h3>
+                    <div id="arbListaPasos" class="lista-pasos"></div>
+                </div>
+            </div>
+
+            <div class="piloto piloto-arbol">
+                <div class="arbol-marco" id="arbMarcoArbol">
+                    <div id="arbVisualArbol" class="arbol-contenido"></div>
+                </div>
+            </div>
+        </div>
+
+        <button class="btn-volver" data-volver="vista-residuos">← Volver</button>
     </section>
 
     <!-- ============ VISTA: PLACEHOLDER (SIN FUNCIONALIDAD) ============ -->

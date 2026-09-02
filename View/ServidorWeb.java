@@ -3,14 +3,18 @@ package View;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 
+import Controller.GestorArbolDigitalLetras;
 import Controller.GestorBusquedas;
 import Controller.GestorBusquedasExternas;
 import Model.EstructuraDeDatos;
 import Model.busquedas.PasoBusqueda;
 import Model.busquedas.ResultadoBusqueda;
 import Model.estructuras.EstructuraArbolDigital;
+import Model.estructuras.EstructuraArbolDigitalLetras;
 import Model.estructuras.EstructuraHash;
 import Model.estructuras.NodoArbolDigital;
+import Model.estructuras.NodoArbolDigitalLetras;
+import Model.estructuras.PasoBusquedaLetras;
 import Model.estructuras.PasoInsercion;
 import Model.excepciones.ExcepcionEstructura;
 import Model.transformaciones.FuncionHash;
@@ -73,6 +77,9 @@ public class ServidorWeb {
     /** Controlador de las BÚSQUEDAS EXTERNAS (cubetas dinámicas). */
     private GestorBusquedasExternas externo;
 
+    /** Controlador del ÁRBOL DIGITAL DE LETRAS (búsqueda por residuos A-Z). */
+    private GestorArbolDigitalLetras arbolLetras;
+
     /** Puerta de entrada HTTP del JDK. */
     private HttpServer servidor;
 
@@ -92,6 +99,7 @@ public class ServidorWeb {
                 EstructuraDeDatos.CAPACIDAD_MINIMA);
         this.externo = new GestorBusquedasExternas(
                 EstructuraDeDatos.DIGITOS_MINIMOS);
+        this.arbolLetras = new GestorArbolDigitalLetras();
     }
 
     /**
@@ -173,6 +181,16 @@ public class ServidorWeb {
                 responderJson(intercambio, externoReiniciarJson());
             } else if (ruta.equals("/api/externo/cargar")) {
                 responderJson(intercambio, externoCargarJson(intercambio));
+            } else if (ruta.equals("/api/letras/estado")) {
+                responderJson(intercambio, letrasEstadoJson());
+            } else if (ruta.equals("/api/letras/insertar")) {
+                responderJson(intercambio, letrasInsertarJson(intercambio));
+            } else if (ruta.equals("/api/letras/buscar")) {
+                responderJson(intercambio, letrasBuscarJson(intercambio));
+            } else if (ruta.equals("/api/letras/eliminar")) {
+                responderJson(intercambio, letrasEliminarJson(intercambio));
+            } else if (ruta.equals("/api/letras/reiniciar")) {
+                responderJson(intercambio, letrasReiniciarJson());
             } else {
                 servirEstatico(intercambio, ruta);
             }
@@ -914,6 +932,216 @@ public class ServidorWeb {
         } catch (ExcepcionEstructura e) {
             return errorJson(e.getMessage());
         }
+    }
+
+    // ========================================================================
+    // ÁRBOL DIGITAL DE LETRAS - ENDPOINTS /api/letras/*
+    // ========================================================================
+
+    /**
+     * Estado del árbol digital de letras: la estructura serializada para
+     * que la vista la dibuje (sin configuración previa requerida).
+     *
+     * @return literal JSON de estado del árbol de letras.
+     */
+    private String letrasEstadoJson() {
+        return "{\"seleccionHecha\":" + arbolLetras.isSeleccionHecha()
+                + ",\"estructura\":" + letrasEstructuraJson() + '}';
+    }
+
+    /**
+     * Serializa la estructura de letras: cantidad de letras y el árbol
+     * jerárquico con nodos que llevan letra, posición, binario y ramas.
+     *
+     * @return literal JSON de la estructura de letras.
+     */
+    private String letrasEstructuraJson() {
+        EstructuraArbolDigitalLetras est = arbolLetras.getEstructura();
+
+        StringBuilder json = new StringBuilder("{");
+        json.append("\"tipo\":").append(
+                SerializadorJson.cadena("ARBOL DIGITAL LETRAS"));
+        json.append(",\"cantidad\":").append(est.getCantidad());
+        json.append(",\"raiz\":").append(nodoLetrasJson(est.getRaiz()));
+        json.append('}');
+        return json.toString();
+    }
+
+    /**
+     * Serializa un nodo del árbol de letras recursivamente (o null si no
+     * existe). Los nodos vacíos (letra eliminada) envían letra null.
+     *
+     * @param nodo nodo actual del árbol de letras.
+     * @return literal JSON del nodo y sus hijos.
+     */
+    private String nodoLetrasJson(NodoArbolDigitalLetras nodo) {
+        if (nodo == null) {
+            return "null";
+        }
+        return "{\"vacio\":" + nodo.estaVacio()
+                + ",\"letra\":"
+                + (nodo.estaVacio() ? "null"
+                        : SerializadorJson.cadena(String.valueOf(nodo.getLetra())))
+                + ",\"posicion\":"
+                + (nodo.estaVacio() ? -1 : nodo.getPosicion())
+                + ",\"binario\":"
+                + (nodo.estaVacio() ? "null"
+                        : SerializadorJson.cadena(nodo.getBinario()))
+                + ",\"izq\":" + nodoLetrasJson(nodo.getIzquierda())
+                + ",\"der\":" + nodoLetrasJson(nodo.getDerecha())
+                + '}';
+    }
+
+    /**
+     * Serializa una lista de pasos del árbol de letras al formato que espera
+     * la página: numero, letra (null si vacía), bit (null si no aplica) y
+     * descripcion.
+     *
+     * @param pasos pasos a serializar (puede ser null).
+     * @return literal JSON de arreglo de pasos.
+     */
+    private String letrasPasosJson(List<PasoBusquedaLetras> pasos) {
+        StringBuilder json = new StringBuilder("[");
+        if (pasos != null) {
+            for (int i = 0; i < pasos.size(); i++) {
+                PasoBusquedaLetras paso = pasos.get(i);
+                if (i > 0) {
+                    json.append(',');
+                }
+                json.append("{\"numero\":").append(paso.getNumero())
+                        .append(",\"letra\":")
+                        .append((paso.getLetra() == '\0' ? "null"
+                                : SerializadorJson.cadena(
+                                        String.valueOf(paso.getLetra()))))
+                        .append(",\"bit\":")
+                        .append((paso.getBit() == '\0' ? "null"
+                                : SerializadorJson.cadena(
+                                        String.valueOf(paso.getBit()))))
+                        .append(",\"descripcion\":")
+                        .append(SerializadorJson.cadena(paso.getDescripcion()))
+                        .append('}');
+            }
+        }
+        json.append(']');
+        return json.toString();
+    }
+
+    /**
+     * Inserta una letra en el árbol digital.
+     *
+     * @param intercambio contexto HTTP con el parámetro letra.
+     * @return JSON de resultado con la letra, posición, binario y los pasos
+     *         detallados del cálculo de posición y del descenso.
+     */
+    private String letrasInsertarJson(HttpExchange intercambio) {
+        Map<String, String> parametros = leerParametros(intercambio);
+        try {
+            char letra = letraObligatoria(parametros, "letra");
+            arbolLetras.insertarLetra(letra);
+            int posicion = letra - 'A' + 1;
+            return "{\"ok\":true"
+                    + ",\"mensaje\":" + SerializadorJson.cadena(
+                            "Letra '" + letra + "' insertada (posición "
+                                    + posicion + ", binario fijo "
+                                    + EstructuraArbolDigitalLetras
+                                            .binarioDePosicion(posicion)
+                                    + ").")
+                    + ",\"letra\":" + SerializadorJson.cadena(
+                            String.valueOf(letra))
+                    + ",\"pasos\":" + letrasPasosJson(
+                            arbolLetras.getEstructura()
+                                    .getUltimosPasosInsercion())
+                    + '}';
+        } catch (ExcepcionEstructura e) {
+            return errorJson(e.getMessage());
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return errorJson(e.getMessage());
+        }
+    }
+
+    /**
+     * Busca una letra y devuelve los pasos de la búsqueda para animarla.
+     *
+     * @param intercambio contexto HTTP con el parámetro letra.
+     * @return JSON con encontrada/pasos/mensaje.
+     */
+    private String letrasBuscarJson(HttpExchange intercambio) {
+        Map<String, String> parametros = leerParametros(intercambio);
+        try {
+            char letra = letraObligatoria(parametros, "letra");
+            List<PasoBusquedaLetras> lista = arbolLetras.buscarLetra(letra);
+
+            String pasos = letrasPasosJson(lista);
+
+            boolean encontrada = !lista.isEmpty()
+                    && lista.get(lista.size() - 1).getLetra() == letra;
+            return "{\"encontrada\":" + encontrada
+                    + ",\"letra\":" + SerializadorJson.cadena(
+                            String.valueOf(letra))
+                    + ",\"mensaje\":" + SerializadorJson.cadena(
+                            encontrada
+                                    ? "La letra '" + letra
+                                            + "' está en el árbol."
+                                    : "La letra '" + letra
+                                            + "' NO está en el árbol.")
+                    + ",\"pasos\":" + pasos + '}';
+        } catch (ExcepcionEstructura e) {
+            return errorJson(e.getMessage());
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return errorJson(e.getMessage());
+        }
+    }
+
+    /**
+     * Elimina una letra del árbol (su nodo queda vacío conservando hijos).
+     *
+     * @param intercambio contexto HTTP con el parámetro letra.
+     * @return JSON de resultado con los pasos detallados del recorrido.
+     */
+    private String letrasEliminarJson(HttpExchange intercambio) {
+        Map<String, String> parametros = leerParametros(intercambio);
+        try {
+            char letra = letraObligatoria(parametros, "letra");
+            arbolLetras.eliminarLetra(letra);
+            return "{\"ok\":true"
+                    + ",\"mensaje\":" + SerializadorJson.cadena(
+                            "Letra '" + letra
+                            + "' eliminada del árbol: su nodo quedó vacío.")
+                    + ",\"pasos\":" + letrasPasosJson(
+                            arbolLetras.getEstructura()
+                                    .getUltimosPasosEliminacion())
+                    + '}';
+        } catch (ExcepcionEstructura e) {
+            return errorJson(e.getMessage());
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return errorJson(e.getMessage());
+        }
+    }
+
+    /**
+     * Vacía el árbol de letras por completo.
+     *
+     * @return JSON de resultado.
+     */
+    private String letrasReiniciarJson() {
+        arbolLetras.reiniciar();
+        return okJson("Árbol de letras reiniciado: queda vacío y listo para "
+                + "empezar de cero.");
+    }
+
+    /** Obtiene un carácter de letra obligatorio del parámetro. */
+    private char letraObligatoria(Map<String, String> parametros, String nombre) {
+        String valor = textoObligatorio(parametros, nombre);
+        if (valor.length() != 1) {
+            throw new IllegalArgumentException(
+                    "Digite una sola letra A-Z.");
+        }
+        char c = Character.toUpperCase(valor.charAt(0));
+        if (c < 'A' || c > 'Z') {
+            throw new IllegalArgumentException(
+                    "Letra inválida: solo se admiten letras A-Z.");
+        }
+        return c;
     }
 
     // ========================================================================
