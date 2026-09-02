@@ -615,6 +615,16 @@ button.mudo:hover {
     background: #c15b1c;
 }
 
+/* Chip de leyenda para los NODOS DE ENLACE (bloqueados tras una colisión). */
+.leyenda-enlace {
+    width: 16px;
+    height: 16px;
+    border-radius: 5px;
+    display: inline-block;
+    background: #fdf3f0;
+    border: 2px dashed #e5b4a6;
+}
+
 /* El panel de proceso deja de flotar sobre el grafo; va como tarjeta normal. */
 .arbol-cabecera .columna-proceso {
     position: static;
@@ -1231,6 +1241,22 @@ button.mudo:hover {
 
 .nodoletras.vacio .letragrande {
     color: var(--texto-suave);
+}
+
+/* NODO DE ENLACE: nacido de una colisión, vacío y BLOQUEADO para siempre. */
+.nodoletras.enlace {
+    background: #fdf3f0;
+    border: 2px dashed #e5b4a6;
+    color: #b25b3f;
+}
+
+.nodoletras.enlace .letragrande {
+    color: #c9876f;
+}
+
+.nodoletras.enlace .infodig {
+    color: #b25b3f;
+    background: rgba(255, 255, 255, 0.7);
 }
 
 /* Etiquetas de arista: bit 0 (verde) / bit 1 (naranja). */

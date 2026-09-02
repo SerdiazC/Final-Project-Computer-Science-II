@@ -96,6 +96,7 @@
         <h2>Búsquedas por residuos</h2>
         <div class="grid-principal">
             <button class="boton-grande" id="btnVerArbolDigitalLetras">Árbol de búsqueda digital</button>
+            <button class="boton-grande" id="btnVerResiduosLetras">Búsqueda por residuos (letras)</button>
             <button class="boton-grande" data-metodo="ARBOL POR RESIDUOS">Árbol de búsqueda por residuos</button>
             <button class="boton-grande mudo" id="btnVerResiduosMultiples">Árbol de búsqueda por residuos múltiples</button>
         </div>
@@ -350,6 +351,71 @@
             <div class="piloto piloto-arbol">
                 <div class="arbol-marco" id="arbMarcoArbol">
                     <div id="arbVisualArbol" class="arbol-contenido"></div>
+                </div>
+            </div>
+        </div>
+
+        <button class="btn-volver" data-volver="vista-residuos">← Volver</button>
+    </section>
+
+    <!-- ============ VISTA: BÚSQUEDA POR RESIDUOS DE LETRAS (HOJA) ============ -->
+    <section class="tarjeta vista" id="vista-residuoletras" hidden>
+        <h2>Búsqueda por residuos (letras)</h2>
+        <p class="ayuda" id="resAyuda">
+            Misma lógica del árbol digital (posición en el alfabeto y binario
+            fijo a 5 cifras), pero con RAÍZ SIEMPRE VACÍA. Aquí todos los
+            nodos que nacen de una COLISIÓN se convierten en nodos de ENLACE:
+            queda vacío y bloqueado, y ninguna letra puede ubicarse en él. Al
+            colisionar, la letra ya insertada desciende según su siguiente
+            cifra binaria y la letra nueva también, hasta encontrar una cifra
+            distinta y separarse.
+        </p>
+
+        <div id="resZonaOperaciones">
+            <div class="fila">
+                <label>
+                    Letra (A-Z)
+                    <input type="text" id="resLetra" maxlength="1" autocomplete="off">
+                </label>
+                <button id="resBtnInsertar">Insertar</button>
+                <button id="resBtnBuscar" class="principal">Buscar</button>
+                <button id="resBtnEliminar" class="peligro">Eliminar</button>
+            </div>
+            <div id="resMensaje" class="aviso"></div>
+            <div class="fila estructura-fila">
+                <button id="resBtnReiniciar" class="peligro">Limpiar y empezar de cero</button>
+            </div>
+
+            <div class="arbol-cabecera">
+                <div class="arbol-panel">
+                    <h3>Árbol activo</h3>
+                    <div id="resEstadoEstructura" class="aviso"></div>
+                    <div id="resEstadoAnimacion" class="estado-animacion"></div>
+                    <div class="arbol-controles">
+                        <button id="resZoomMenos" class="gris zoom-boton" title="Alejar (Ctrl + rueda)">−</button>
+                        <span id="resZoomEtiqueta" class="zoom-etiqueta">Encajar</span>
+                        <button id="resZoomMas" class="gris zoom-boton" title="Acercar (Ctrl + rueda)">+</button>
+                        <button id="resZoomEncajar" title="Ajustar el árbol al espacio disponible">Encajar</button>
+                    </div>
+                    <div class="arbol-resumen">
+                        <span class="arbol-resumen-nombre">Letras insertadas</span>
+                        <span class="arbol-resumen-chips" id="resResumenLetras">(vacío)</span>
+                    </div>
+                    <div class="arbol-leyenda">
+                        <span class="leyenda-item"><i class="leyenda-bit bit0"></i>0 &rarr; izquierda</span>
+                        <span class="leyenda-item"><i class="leyenda-bit bit1"></i>1 &rarr; derecha</span>
+                        <span class="leyenda-item"><i class="leyenda-enlace"></i>Enlace (bloqueado)</span>
+                    </div>
+                </div>
+                <div class="arbol-panel columna-proceso">
+                    <h3>Proceso de la operación</h3>
+                    <div id="resListaPasos" class="lista-pasos"></div>
+                </div>
+            </div>
+
+            <div class="piloto piloto-arbol">
+                <div class="arbol-marco" id="resMarcoArbol">
+                    <div id="resVisualArbol" class="arbol-contenido"></div>
                 </div>
             </div>
         </div>

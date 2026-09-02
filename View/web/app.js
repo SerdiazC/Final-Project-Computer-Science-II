@@ -2168,3 +2168,513 @@ arbMarco.addEventListener('wheel', (evento) => {
 arbMarco.addEventListener('dblclick', () => {
     arbZoomEncajar();
 });
+
+/* ======================================================================
+ * ÁRBOL DE BÚSQUEDA POR RESIDUOS DE LETRAS (raíz vacía + nodos de enlace)
+ * ======================================================================
+ * Mismo motor de dibujo/animación que el árbol de letras, pero con su
+ * propia estructura (raíz SIEMPRE vacía) y nodos de ENLACE por colisión.
+ */
+
+let resEstado = { seleccionHecha: false, estructura: {} };
+
+/** true mientras una animación del árbol de residuos de letras está en curso. */
+let resAnimando = false;
+
+/** Límites del zoom manual del árbol de residuos de letras. */
+const RES_ESCALA_MIN = 0.05;
+const RES_ESCALA_MAX = 3;
+
+/** true mientras el zoom queda en modo "Encajar" (auto-ajuste al espacio). */
+let resZoomAuto = true;
+
+/** Factor de zoom manual vigente (usado si resZoomAuto es false). */
+let resEscala = 1;
+
+/** Recarga el estado del árbol de residuos de letras desde el servidor. */
+async function resRecargarEstado() {
+    resEstado = await llamarApi('/api/residuos/estado');
+    resPintarAviso();
+    resActualizarResumen();
+    resDibujar();
+    return resEstado;
+}
+
+/** Lista las letras insertadas (recorrido en orden) en la tarjeta izquierda. */
+function resActualizarResumen() {
+    const zona = document.getElementById('resResumenLetras');
+    if (!zona) {
+        return;
+    }
+    const letras = [];
+    (function recorrer(nodo) {
+        if (!nodo) {
+            return;
+        }
+        if (nodo.izq) {
+            recorrer(nodo.izq);
+        }
+        if (nodo.letra) {
+            letras.push(nodo.letra);
+        }
+        if (nodo.der) {
+            recorrer(nodo.der);
+        }
+    })(resEstado && resEstado.estructura ? resEstado.estructura.raiz : null);
+    zona.innerHTML = '';
+    if (!letras.length) {
+        zona.textContent = '(vacío)';
+        return;
+    }
+    letras.forEach((letra) => {
+        const chip = document.createElement('span');
+        chip.className = 'chip-letra';
+        chip.textContent = letra;
+        zona.appendChild(chip);
+    });
+}
+
+/** Abre la hoja de búsqueda por residuos de letras desde el menú. */
+function abrirResiduosLetras() {
+    document.getElementById('resLetra').value = '';
+    document.getElementById('resMensaje').textContent =
+        'Digite una letra A-Z para insertarla, buscarla o eliminarla (la '
+        + 'raíz siempre está vacía; las colisiones generan enlaces).';
+    document.getElementById('resMensaje').classList.remove('error', 'exito');
+    document.getElementById('resEstadoEstructura').textContent = '';
+    document.getElementById('resEstadoAnimacion').textContent = '';
+    document.getElementById('resVisualArbol').innerHTML = '';
+    document.getElementById('resListaPasos').innerHTML = '';
+    document.getElementById('resZoomEtiqueta').textContent = 'Encajar';
+    resZoomAuto = true;
+    resEscala = 1;
+
+    navegarA('vista-residuoletras',
+        ['Algoritmos de búsqueda', 'Búsquedas internas',
+            'Búsquedas por residuos', 'Búsqueda por residuos (letras)']);
+    resRecargarEstado().catch((error) => {
+        resMostrarMensaje('Error conectando con el servidor: '
+            + error.message, true);
+    });
+}
+
+/** Muestra un aviso en la hoja de residuos de letras. */
+function resMostrarMensaje(texto, esError) {
+    const aviso = document.getElementById('resMensaje');
+    aviso.textContent = texto;
+    aviso.classList.remove('error', 'exito');
+    aviso.classList.add(esError ? 'error' : 'exito');
+}
+
+/** Bloquea o habilita los botones de residuos de letras durante la animación. */
+function resBloquearBotones(bloquear) {
+    ['resBtnInsertar', 'resBtnBuscar', 'resBtnEliminar', 'resBtnReiniciar'
+    ].forEach((id) => {
+        document.getElementById(id).disabled = bloquear;
+    });
+}
+
+/** Agrega una línea al registro de proceso de residuos de letras. */
+function resAnadirLog(texto, esError) {
+    const contenedor = document.getElementById('resListaPasos');
+    const div = document.createElement('div');
+    div.className = 'paso ' + (esError ? 'error' : 'encontrado');
+    div.innerHTML = '<span class="numero">' + (esError ? 'Error' : 'Hecho')
+        + '</span><span class="detalle">' + escapeHtml(texto) + '</span>';
+    contenedor.appendChild(div);
+    contenedor.scrollTop = contenedor.scrollHeight;
+}
+
+/**
+ * Lista los pasos de una inserción/eliminación de forma estática (sin
+ * animación) en el panel de proceso de residuos de letras.
+ */
+function resLogEstatico(pasos) {
+    const contenedor = document.getElementById('resListaPasos');
+    contenedor.innerHTML = '';
+    (pasos || []).forEach((paso) => {
+        const div = document.createElement('div');
+        div.className = 'paso';
+        div.innerHTML = '<span class="numero">Paso ' + paso.numero
+            + '</span><span class="detalle">' + escapeHtml(paso.descripcion)
+            + '</span>';
+        contenedor.appendChild(div);
+    });
+    contenedor.scrollTop = contenedor.scrollHeight;
+}
+
+/** Actualiza el aviso de estado de residuos de letras. */
+function resPintarAviso() {
+    const aviso = document.getElementById('resEstadoEstructura');
+    const cantidad = resEstado.estructura.cantidad || 0;
+    aviso.textContent = cantidad === 0
+        ? 'El árbol está vacío: la RAÍZ es siempre un nodo vacío (enlace '
+            + 'permanente) y ninguna letra se ubica en ella.'
+        : 'Letras colocadas: ' + cantidad + ' de 26.';
+    aviso.classList.remove('error', 'exito');
+}
+
+/**
+ * Dibuja el árbol de residuos de letras COMO UN GRAFO (mismo motor que el
+ * árbol de letras). Cada nodo muestra su letra/posición/binario; los nodos
+ * VACÍOS normales usan estilo punteado y los nodos de ENLACE (bloqueados)
+ * usan un estilo punteado anaranjado distinto. La raíz se dibuja siempre.
+ */
+function resDibujar() {
+    const visual = document.getElementById('resVisualArbol');
+    visual.innerHTML = '';
+    const marco = document.getElementById('resMarcoArbol');
+    const raiz = resEstado.estructura.raiz;
+    if (!raiz) {
+        visual.textContent = '(árbol sin nodos: inserte la primera letra)';
+        document.getElementById('resZoomEtiqueta').textContent = 'Encajar';
+        return;
+    }
+
+    const AN = 110;
+    const X_PASO = 150;
+    const Y_PASO = 120;
+    const PAD = 55;
+    const altoNodo = 66;
+
+    const posiciones = [];
+    let contadorX = 0;
+    let maxProfundidad = 0;
+    (function recorrer(nodo, profundidad) {
+        if (!nodo) {
+            return;
+        }
+        if (nodo.izq) {
+            recorrer(nodo.izq, profundidad + 1);
+        }
+        posiciones.push({ nodo, x: contadorX, y: profundidad });
+        contadorX++;
+        maxProfundidad = Math.max(maxProfundidad, profundidad);
+        if (nodo.der) {
+            recorrer(nodo.der, profundidad + 1);
+        }
+    })(raiz, 0);
+
+    const ancho = PAD * 2 + (contadorX - 1) * X_PASO + AN;
+    const alto = PAD * 2 + maxProfundidad * Y_PASO + altoNodo;
+
+    const escala = resObtenerEscala(marco, ancho, alto);
+    resActualizarControlZoom(escala);
+
+    const grafo = document.createElement('div');
+    grafo.className = 'arbol-grafo';
+    grafo.style.width = ancho + 'px';
+    grafo.style.height = alto + 'px';
+
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('class', 'arbol-lineas');
+    svg.setAttribute('width', ancho);
+    svg.setAttribute('height', alto);
+
+    const porNodo = new Map();
+    posiciones.forEach((pos) => porNodo.set(pos.nodo, pos));
+
+    const centroX = (pos) => PAD + pos.x * X_PASO + AN / 2;
+    const centroY = (pos) => PAD + pos.y * Y_PASO + altoNodo / 2;
+
+    posiciones.forEach((pos) => {
+        [['izq', '0'], ['der', '1']].forEach((par) => {
+            const campo = par[0];
+            const bit = par[1];
+            const hijo = pos.nodo[campo];
+            const posHijo = porNodo.get(hijo);
+            if (!posHijo) {
+                return;
+            }
+            const x1 = centroX(pos);
+            const y1 = centroY(pos);
+            const x2 = centroX(posHijo);
+            const y2 = centroY(posHijo);
+
+            const linea = document.createElementNS(
+                'http://www.w3.org/2000/svg', 'line');
+            linea.setAttribute('class', 'arbol-lado '
+                + (bit === '0' ? 'lado0' : 'lado1'));
+            linea.setAttribute('x1', x1);
+            linea.setAttribute('y1', y1);
+            linea.setAttribute('x2', x2);
+            linea.setAttribute('y2', y2);
+            svg.appendChild(linea);
+
+            const etiqueta = document.createElementNS(
+                'http://www.w3.org/2000/svg', 'text');
+            etiqueta.setAttribute('class', 'arbol-bit '
+                + (bit === '0' ? 'bit0' : 'bit1'));
+            etiqueta.setAttribute('x', (x1 + x2) / 2);
+            etiqueta.setAttribute('y', (y1 + y2) / 2 - 5);
+            etiqueta.textContent = bit;
+            svg.appendChild(etiqueta);
+        });
+    });
+
+    grafo.appendChild(svg);
+
+    posiciones.forEach((pos) => {
+        const nodoDom = resConstruirNodo(pos.nodo);
+        nodoDom.style.left = (PAD + pos.x * X_PASO) + 'px';
+        nodoDom.style.top = (PAD + pos.y * Y_PASO) + 'px';
+        grafo.appendChild(nodoDom);
+    });
+
+    const zoom = document.createElement('div');
+    zoom.className = 'arbol-zoom';
+    zoom.style.width = Math.round(ancho * escala) + 'px';
+    zoom.style.height = Math.round(alto * escala) + 'px';
+    zoom.style.transform = 'scale(' + escala + ')';
+
+    const anchoMarco = Math.max(marco.clientWidth || 600, 100);
+    const altoMarco = Math.max(marco.clientHeight || 500, 100);
+    const sobraX = Math.max(0, Math.round((anchoMarco - ancho * escala) / 2));
+    const sobraY = Math.max(0, Math.round((altoMarco - alto * escala) / 2));
+    zoom.style.marginLeft = sobraX + 'px';
+    zoom.style.marginTop = sobraY + 'px';
+
+    zoom.appendChild(grafo);
+    visual.appendChild(zoom);
+}
+
+/** Devuelve la escala de dibujo de residuos de letras. */
+function resObtenerEscala(marco, ancho, alto) {
+    let escala;
+    if (resZoomAuto) {
+        const anchoMarco = Math.max(marco.clientWidth || 600, 100) - 28;
+        const altoMarco = Math.max(marco.clientHeight || 500, 100) - 28;
+        escala = Math.min(anchoMarco / ancho, altoMarco / alto, 1.25);
+    } else {
+        escala = resEscala;
+    }
+    escala = Math.max(RES_ESCALA_MIN,
+        Math.min(RES_ESCALA_MAX, escala));
+    resEscala = escala;
+    return escala;
+}
+
+/** Muestra el porcentaje de zoom vigente en el control. */
+function resActualizarControlZoom(escala) {
+    const etiqueta = document.getElementById('resZoomEtiqueta');
+    if (etiqueta) {
+        etiqueta.textContent = Math.round(escala * 100) + ' %';
+    }
+}
+
+/** Aleja el árbol de residuos un 20 % y sale del modo "Encajar". */
+function resZoomMenos() {
+    resZoomAuto = false;
+    resEscala = Math.max(RES_ESCALA_MIN,
+        Math.round(resEscala * 0.8 * 100) / 100);
+    resDibujar();
+}
+
+/** Acerca el árbol de residuos un 25 % y sale del modo "Encajar". */
+function resZoomMas() {
+    resZoomAuto = false;
+    resEscala = Math.min(RES_ESCALA_MAX,
+        Math.round(resEscala * 1.25 * 100) / 100);
+    resDibujar();
+}
+
+/** Vuelve al modo "Encajar" en residuos de letras. */
+function resZoomEncajar() {
+    resZoomAuto = true;
+    resDibujar();
+}
+
+/** Construye el nodo visible de residuos de letras (sin layout). */
+function resConstruirNodo(nodo) {
+    const caja = document.createElement('div');
+    let clase = 'nodoletras ';
+    if (nodo.enlace) {
+        clase += 'enlace';
+    } else if (nodo.vacio) {
+        clase += 'vacio';
+    }
+    caja.className = clase;
+    caja.dataset.letra = nodo.vacio || nodo.enlace ? '' : nodo.letra;
+    const marca = nodo.enlace ? '&bull;&bull;&bull;' : '&mdash;';
+    caja.innerHTML = '<span class="letragrande">'
+        + (nodo.vacio || nodo.enlace ? marca : escapeHtml(nodo.letra))
+        + '</span>'
+        + ((nodo.vacio || nodo.enlace) ? '' : '<br><span class="infodig">pos '
+            + nodo.posicion + ' · bin ' + escapeHtml(nodo.binario) + '</span>');
+    return caja;
+}
+
+/** Localiza el nodo visible de residuos de letras por su letra. */
+function resUbicarNodo(letra) {
+    return document.querySelector(
+        '#resVisualArbol .nodoletras[data-letra="' + letra + '"]');
+}
+
+/**
+ * Reproduce la búsqueda de una letra animada (mismo motor que el árbol
+ * de letras) en el árbol de residuos.
+ */
+async function resAnimarBusqueda(pasos, encontrada, letra) {
+    const pasosLog = document.getElementById('resListaPasos');
+    pasosLog.innerHTML = '';
+
+    let previo = null;
+    for (const paso of pasos) {
+        if (previo) {
+            previo.classList.remove('comparando');
+            previo.classList.add('barrido');
+        }
+        document.getElementById('resEstadoAnimacion').textContent =
+            'Paso ' + paso.numero + ': ' + paso.descripcion;
+        const nodo = paso.letra ? resUbicarNodo(paso.letra) : null;
+        if (nodo) {
+            nodo.classList.add('comparando');
+            nodo.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            previo = nodo;
+        } else {
+            previo = null;
+        }
+        const div = document.createElement('div');
+        div.className = 'paso';
+        div.innerHTML = '<span class="numero">Paso ' + paso.numero
+            + '</span><span class="detalle">' + escapeHtml(paso.descripcion)
+            + '</span>';
+        pasosLog.appendChild(div);
+        pasosLog.scrollTop = pasosLog.scrollHeight;
+        await new Promise((resolver) => setTimeout(resolver, 520));
+    }
+    if (previo) {
+        previo.classList.remove('comparando');
+    }
+
+    if (encontrada) {
+        const hallado = resUbicarNodo(letra);
+        if (hallado) {
+            hallado.classList.remove('comparando', 'barrido');
+            hallado.classList.add('hallado');
+            hallado.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            setTimeout(() => hallado.classList.remove('hallado'), 2200);
+        }
+    }
+    document.getElementById('resEstadoAnimacion').textContent = '';
+}
+
+/** Resalta brevemente el nodo que acaba de insertarse o eliminarse. */
+function resResaltar(letra) {
+    const nodo = resUbicarNodo(letra)
+        || document.querySelector('#resVisualArbol .nodoletras.vacio');
+    if (!nodo) {
+        return;
+    }
+    nodo.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    nodo.classList.add('insertando');
+    setTimeout(() => nodo.classList.remove('insertando'), 1200);
+}
+
+/** Operación genérica de residuos de letras (insertar/buscar/eliminar). */
+async function resOperar(operacion) {
+    if (resAnimando) {
+        return;
+    }
+    const valor = document.getElementById('resLetra').value.trim();
+    if (!/^[a-zA-Z]$/.test(valor)) {
+        resMostrarMensaje('Digite una sola letra A-Z.', true);
+        return;
+    }
+    const letra = valor.toUpperCase();
+
+    resAnimando = true;
+    resBloquearBotones(true);
+    try {
+        const ruta = '/api/residuos/' + operacion + '?letra=' + letra;
+        const resultado = await llamarApi(ruta);
+
+        if (operacion === 'buscar') {
+            await resRecargarEstado();
+            await resAnimarBusqueda(resultado.pasos || [], resultado.encontrada, letra);
+            resAnadirLog(resultado.mensaje, !resultado.encontrada);
+            resMostrarMensaje(resultado.mensaje, !resultado.encontrada);
+        } else {
+            document.getElementById('resListaPasos').innerHTML = '';
+            if (!resultado.ok) {
+                resAnadirLog(resultado.mensaje, true);
+                resMostrarMensaje(resultado.mensaje, true);
+                return;
+            }
+            await resRecargarEstado();
+            resLogEstatico(resultado.pasos);
+            resResaltar(letra);
+            resAnadirLog(resultado.mensaje, false);
+            resMostrarMensaje(resultado.mensaje, false);
+        }
+    } catch (error) {
+        resMostrarMensaje('Error conectando con el servidor: '
+            + error.message, true);
+    } finally {
+        resAnimando = false;
+        resBloquearBotones(false);
+    }
+}
+
+/** Limpia el árbol de residuos de letras y deja la hoja operativa. */
+async function resReiniciar() {
+    if (resAnimando) {
+        return;
+    }
+    resAnimando = true;
+    resBloquearBotones(true);
+    try {
+        const resultado = await llamarApi('/api/residuos/reiniciar');
+        await resRecargarEstado();
+        document.getElementById('resLetra').value = '';
+        document.getElementById('resListaPasos').innerHTML = '';
+        document.getElementById('resEstadoAnimacion').textContent = '';
+        resMostrarMensaje(resultado.mensaje, false);
+    } catch (error) {
+        resMostrarMensaje('Error limpiando: ' + error.message, true);
+    } finally {
+        resAnimando = false;
+        resBloquearBotones(false);
+    }
+}
+
+// --- Eventos de residuos de letras ---
+document.getElementById('btnVerResiduosLetras').addEventListener('click', () =>
+    abrirResiduosLetras());
+document.getElementById('resBtnInsertar').addEventListener('click', () => resOperar('insertar'));
+document.getElementById('resBtnBuscar').addEventListener('click', () => resOperar('buscar'));
+document.getElementById('resBtnEliminar').addEventListener('click', () => resOperar('eliminar'));
+document.getElementById('resBtnReiniciar').addEventListener('click', resReiniciar);
+document.getElementById('resLetra').addEventListener('keydown', (evento) => {
+    if (evento.key === 'Enter') {
+        resOperar('insertar');
+    }
+});
+document.getElementById('resLetra').addEventListener('input', (evento) => {
+    evento.target.value = evento.target.value
+        .replace(/[^a-zA-Z]/g, '').slice(0, 1).toUpperCase();
+});
+
+// --- Zoom de residuos de letras ---
+document.getElementById('resZoomMenos').addEventListener('click', resZoomMenos);
+document.getElementById('resZoomMas').addEventListener('click', resZoomMas);
+document.getElementById('resZoomEncajar').addEventListener('click', resZoomEncajar);
+const resMarco = document.getElementById('resMarcoArbol');
+resMarco.addEventListener('wheel', (evento) => {
+    if (!evento.ctrlKey) {
+        return;
+    }
+    evento.preventDefault();
+    resZoomAuto = false;
+    if (evento.deltaY < 0) {
+        resEscala = Math.min(RES_ESCALA_MAX,
+            Math.round(resEscala * 1.15 * 100) / 100);
+    } else {
+        resEscala = Math.max(RES_ESCALA_MIN,
+            Math.round(resEscala * 0.87 * 100) / 100);
+    }
+    resDibujar();
+}, { passive: false });
+resMarco.addEventListener('dblclick', () => {
+    resZoomEncajar();
+});
