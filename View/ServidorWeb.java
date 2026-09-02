@@ -659,6 +659,8 @@ public class ServidorWeb {
 
         StringBuilder json = new StringBuilder("{");
         json.append("\"tipo\":\"").append("EXTERN\u00c1").append("\"");
+        json.append(",\"tipoEstructura\":")
+                .append(SerializadorJson.cadena(est.getTipoEstructura()));
         json.append(",\"numCubetas\":").append(est.getNumeroCubetas());
         json.append(",\"cantidad\":").append(est.getCantidad());
         json.append(",\"capacidadBase\":").append(est.getCapacidadBase());
@@ -709,13 +711,18 @@ public class ServidorWeb {
         Map<String, String> parametros = leerParametros(intercambio);
         try {
             int digitos = enteroObligatorio(parametros, "digitos");
+            String tipo = parametros.get("tipo");
+            if (tipo == null || tipo.isBlank()) {
+                tipo = "TOTAL";
+            }
             String filasTexto = parametros.get("filas");
             String columnasTexto = parametros.get("cubetasPorFila");
             if (filasTexto != null && !filasTexto.isBlank()
                     && columnasTexto != null && !columnasTexto.isBlank()) {
                 int cubetasPorFila = Integer.parseInt(columnasTexto.trim());
                 int filas = Integer.parseInt(filasTexto.trim());
-                externo.configurar(digitos, cubetasPorFila, filas);
+                externo.configurar(digitos, cubetasPorFila, filas,
+                        tipo.trim());
             } else {
                 String cubetasTexto = parametros.get("numCubetas");
                 if (cubetasTexto == null || cubetasTexto.isBlank()) {
@@ -726,7 +733,8 @@ public class ServidorWeb {
                 }
             }
             return okJson("Búsqueda externa configurada: claves de " + digitos
-                    + " dígito(s), estructura de cubetas nueva y vacía.");
+                    + " dígito(s), estructura de cubetas nueva y vacía ("
+                    + tipo.trim() + ").");
         } catch (ExcepcionEstructura e) {
             return errorJson(e.getMessage());
         } catch (IllegalArgumentException e) {
@@ -767,7 +775,11 @@ public class ServidorWeb {
             int digitos = enteroObligatorio(parametros, "digitos");
             int cubetasPorFila = enteroObligatorio(parametros, "cubetasPorFila");
             int filas = enteroObligatorio(parametros, "filas");
-            externo.configurar(digitos, cubetasPorFila, filas);
+            String tipo = parametros.get("tipo");
+            if (tipo == null || tipo.isBlank()) {
+                tipo = "TOTAL";
+            }
+            externo.configurar(digitos, cubetasPorFila, filas, tipo.trim());
 
             String metodo = parametros.get("metodo");
             if (metodo != null && !metodo.isBlank()) {

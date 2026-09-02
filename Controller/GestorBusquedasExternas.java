@@ -134,6 +134,26 @@ public class GestorBusquedasExternas {
     }
 
     /**
+     * (Re)configura la cantidad de dígitos, la organización en filas y el
+     * TIPO de estructura dinámica (TOTAL o PARCIAL) de las cubetas. El tipo
+     * determina cómo crecen las expansiones y cómo se encogen al reducir.
+     *
+     * @param digitosClave    cifras exactas (1..7).
+     * @param cubetasPorFila  cubetas que caben en cada fila (mínimo 2).
+     * @param filas           número de filas de cubetas (mínimo 1).
+     * @param tipo            "TOTAL" (duplica) o "PARCIAL" (+50 %).
+     * @throws ExcepcionEstructura si la cifra o el tipo quedan fuera de rango.
+     */
+    public void configurar(int digitosClave, int cubetasPorFila, int filas,
+            String tipo) throws ExcepcionEstructura {
+        this.estructura = new EstructuraCubetas(
+                digitosClave, cubetasPorFila, filas, tipo);
+        this.digitosClave = digitosClave;
+        this.metodoActivo = null;
+        this.ultimoTipoInsercion = null;
+    }
+
+    /**
      * Selecciona la técnica de búsqueda externa que recorre la estructura.
      */
     public void seleccionar(String metodo) {
@@ -202,6 +222,11 @@ public class GestorBusquedasExternas {
     /** @return la estructura externa activa. */
     public EstructuraCubetas getEstructura() {
         return estructura;
+    }
+
+    /** @return tipo de estructura dinámica: "TOTAL" o "PARCIAL". */
+    public String getTipoEstructura() {
+        return estructura.getTipoEstructura();
     }
 
     /** @return dígitos configurables actuales. */

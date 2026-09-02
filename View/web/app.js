@@ -1031,6 +1031,9 @@ let extEstado = { seleccionHecha: false, estructura: {} };
 /** Método de búsqueda externa de la hoja abierta. */
 let extMetodoActual = null;
 
+/** true si la hoja se abrió en modo "búsquedas externas dinámicas" (LINEAL/BINARIA). */
+let extEsDinamica = false;
+
 /** true mientras una animación externa está en curso. */
 let extAnimando = false;
 
@@ -1045,6 +1048,8 @@ async function extRecargarEstado() {
 /** Muestra el método externo en la hoja y navega a su configuración. */
 function extAbrirMetodo(nombre) {
     extMetodoActual = nombre;
+    extEsDinamica = false;
+    document.getElementById('extSelectorMetodo').hidden = true;
     const migas = ['Algoritmos de búsqueda', 'Búsquedas externas', nombre];
 
     document.getElementById('extTituloMetodo').textContent = nombre;
@@ -1062,6 +1067,47 @@ function extAbrirMetodo(nombre) {
     navegarA('vista-externometodo', migas);
 }
 
+/**
+ * Abre la hoja "Búsquedas externas dinámicas": muestra un selector para
+ * elegir el método (LINEAL/BINARIA) y el tipo de estructura (TOTAL/PARCIAL).
+ */
+function extAbrirDinamicas() {
+    extEsDinamica = true;
+    const metodoSel = document.querySelector(
+        'input[name="extMetodoDinamico"]:checked');
+    const metodo = metodoSel ? metodoSel.value : 'LINEAL';
+    extMetodoActual = metodo;
+
+    document.getElementById('extSelectorMetodo').hidden = false;
+    document.getElementById('extTituloMetodo').textContent = 'Búsquedas externas dinámicas';
+    document.getElementById('extAyudaMetodo').textContent =
+        'Elija el método de búsqueda (LINEAL o BINARIA) y el tipo de estructura '
+        + 'dinámica (TOTAL duplica al expandir, PARCIAL crece un 50 %).';
+    document.getElementById('extZonaOperaciones').hidden = true;
+    document.getElementById('extArchivoInput').value = '';
+    document.getElementById('extListaPasos').innerHTML = '';
+    document.getElementById('extMensaje').textContent =
+        'Aplique la configuración para comenzar a operar.';
+    document.getElementById('extMensaje').classList.remove('error', 'exito');
+    document.getElementById('extEstadoEstructura').textContent = '';
+    document.getElementById('extVisualCubetas').innerHTML = '';
+    document.getElementById('extEstadoAnimacion').textContent = '';
+
+    navegarA('vista-externometodo',
+        ['Algoritmos de búsqueda', 'Búsquedas externas', 'Búsquedas externas dinámicas']);
+}
+
+/** Lee el método de búsqueda externo activo según el modo de la hoja. */
+function extMetodoActivo() {
+    if (extEsDinamica) {
+        const sel = document.querySelector('input[name="extMetodoDinamico"]:checked');
+        if (sel) {
+            extMetodoActual = sel.value;
+        }
+    }
+    return extMetodoActual;
+}
+
 /** Aplica dígitos y selecciona el método externo, luego revela las operaciones. */
 async function extAplicar() {
     const digitos = document.getElementById('extDigitos').value.trim();
@@ -1069,14 +1115,18 @@ async function extAplicar() {
         extMostrarMensaje('Indique la cantidad de dígitos de la clave.', true);
         return;
     }
-    if (extMetodoActual === null) {
+    const metodo = extMetodoActivo();
+    if (metodo === null) {
         extMostrarMensaje('Seleccione primero el método de búsqueda externa.', true);
         return;
     }
     try {
         const cubetasFila = document.getElementById('extNumCubetas').value.trim();
         const filas = document.getElementById('extFilas').value.trim();
-        let rutaConfig = '/api/externo/configurar?digitos=' + digitos;
+        const tipoSel = document.querySelector('input[name="extTipo"]:checked');
+        const tipo = tipoSel ? tipoSel.value : 'TOTAL';
+        let rutaConfig = '/api/externo/configurar?digitos=' + digitos
+            + '&tipo=' + encodeURIComponent(tipo);
         if (cubetasFila !== '' && filas !== '') {
             rutaConfig += '&cubetasPorFila=' + cubetasFila + '&filas=' + filas;
         } else if (cubetasFila !== '') {
@@ -1088,7 +1138,7 @@ async function extAplicar() {
             return;
         }
         const rutaSel = '/api/externo/seleccionar?metodo='
-            + encodeURIComponent(extMetodoActual);
+            + encodeURIComponent(metodo);
         const seleccionado = await llamarApi(rutaSel);
         if (!seleccionado.ok) {
             extMostrarMensaje(seleccionado.mensaje, true);
@@ -1121,7 +1171,8 @@ function extPintarAviso() {
     }
     aviso.textContent = 'Claves de ' + estado.digitos + ' dígito(s): rango '
         + estado.rangoMinimo + '..' + estado.rangoMaximo
-        + ' | Método activo: ' + estado.metodo + '.';
+        + ' | Método activo: ' + estado.metodo
+        + ' | Estructura: ' + (estado.estructura.tipoEstructura || 'TOTAL') + '.';
     aviso.classList.remove('error', 'exito');
 }
 
@@ -1303,6 +1354,8 @@ async function extReiniciar() {
     try {
         await llamarApi('/api/externo/reiniciar');
         extMetodoActual = null;
+        extEsDinamica = false;
+        document.getElementById('extSelectorMetodo').hidden = true;
         await extRecargarEstado();
         document.getElementById('extZonaOperaciones').hidden = true;
         document.getElementById('extListaPasos').innerHTML = '';
@@ -1315,6 +1368,10 @@ async function extReiniciar() {
         document.getElementById('extNumCubetas').value = '4';
         document.getElementById('extFilas').value = '1';
         document.getElementById('extArchivoInput').value = '';
+        const totalRadio = document.querySelector('input[name="extTipo"][value="TOTAL"]');
+        if (totalRadio) {
+            totalRadio.checked = true;
+        }
         navegarA('vista-externas',
             ['Algoritmos de búsqueda', 'Búsquedas externas']);
     } catch (error) {
@@ -1340,6 +1397,7 @@ function extExportar() {
         version: 1,
         digitos: extEstado.digitos,
         metodo: extEstado.metodo,
+        tipo: est.tipoEstructura || 'TOTAL',
         filas: est.filas,
         cubetasPorFila: est.cubetasPorFila,
         claves: claves
@@ -1375,13 +1433,28 @@ async function extCargarArchivo(evento) {
         const filas = datos.filas;
         const cubetasPorFila = datos.cubetasPorFila;
         const metodo = datos.metodo;
+        const tipo = datos.tipo || 'TOTAL';
         let ruta = '/api/externo/cargar?digitos=' + encodeURIComponent(digitos)
             + '&cubetasPorFila=' + encodeURIComponent(cubetasPorFila)
             + '&filas=' + encodeURIComponent(filas)
             + '&metodo=' + encodeURIComponent(metodo)
+            + '&tipo=' + encodeURIComponent(tipo)
             + '&claves=' + encodeURIComponent(claves.join(','));
         const resultado = await llamarApi(ruta);
         extMetodoActual = datos.metodo;
+        const esDin = (metodo === 'LINEAL' || metodo === 'BINARIA');
+        extEsDinamica = esDin;
+        document.getElementById('extSelectorMetodo').hidden = !esDin;
+        const radioMetodo = document.querySelector(
+            'input[name="extMetodoDinamico"][value="' + metodo + '"]');
+        if (radioMetodo) {
+            radioMetodo.checked = true;
+        }
+        const radioTipo = document.querySelector(
+            'input[name="extTipo"][value="' + tipo + '"]');
+        if (radioTipo) {
+            radioTipo.checked = true;
+        }
         document.getElementById('extArchivoInput').value = '';
         if (resultado.ok) {
             document.getElementById('extTituloMetodo').textContent = datos.metodo;
@@ -1409,7 +1482,8 @@ function extDibujar() {
         visual.innerHTML = '';
         return;
     }
-    estadoVisual.textContent = 'Cubetas: ' + est.numCubetas
+    estadoVisual.textContent = 'Estructura: ' + (est.tipoEstructura || 'TOTAL')
+        + ' | Cubetas: ' + est.numCubetas
         + ' (' + est.cubetasPorFila + ' por fila x ' + est.filas + ' fila(s))'
         + ' | Claves: ' + est.cantidad
         + ' | Capacidad base: ' + est.capacidadBase
@@ -1422,17 +1496,42 @@ function extDibujar() {
     const porFila = Math.max(1, est.cubetasPorFila || cubetas.length);
     const filas = Math.max(1, est.filas || 1);
 
+    const grilla = document.createElement('div');
+    grilla.className = 'ext-grilla-externa';
+
+    const filaCab = document.createElement('div');
+    filaCab.className = 'ext-fila-col-indices';
+    const celdaVacia = document.createElement('div');
+    celdaVacia.className = 'ext-indice-fila';
+    filaCab.appendChild(celdaVacia);
+    for (let c = 0; c < porFila; c++) {
+        const cab = document.createElement('div');
+        cab.className = 'ext-indice-col';
+        cab.textContent = c;
+        filaCab.appendChild(cab);
+    }
+    grilla.appendChild(filaCab);
+
     for (let f = 0; f < filas; f++) {
-        const grilla = document.createElement('div');
-        grilla.className = 'fila-celdas completa';
-        grilla.dataset.fila = f;
+        const filaEnvoltura = document.createElement('div');
+        filaEnvoltura.className = 'ext-fila-con-indice';
+        const indiceFila = document.createElement('div');
+        indiceFila.className = 'ext-indice-fila';
+        indiceFila.textContent = f;
+        filaEnvoltura.appendChild(indiceFila);
+
+        const grillaCubetas = document.createElement('div');
+        grillaCubetas.className = 'fila-celdas completa';
+        grillaCubetas.dataset.fila = f;
         const desde = f * porFila;
         const hasta = Math.min(cubetas.length, desde + porFila);
         for (let i = desde; i < hasta; i++) {
-            grilla.appendChild(extCrearCubeta(cubetas[i]));
+            grillaCubetas.appendChild(extCrearCubeta(cubetas[i]));
         }
-        visual.appendChild(grilla);
+        filaEnvoltura.appendChild(grillaCubetas);
+        grilla.appendChild(filaEnvoltura);
     }
+    visual.appendChild(grilla);
 }
 
 function extCrearCubeta(cubeta) {
@@ -1475,6 +1574,14 @@ function extCrearCubeta(cubeta) {
 // --- Eventos de búsquedas externas ---
 document.querySelectorAll('[data-externo]').forEach((boton) => {
     boton.addEventListener('click', () => extAbrirMetodo(boton.dataset.externo));
+});
+document.getElementById('btnVerExternasDinamicas').addEventListener('click', extAbrirDinamicas);
+document.querySelectorAll('input[name="extMetodoDinamico"]').forEach((radio) => {
+    radio.addEventListener('change', () => {
+        if (radio.checked) {
+            extMetodoActual = radio.value;
+        }
+    });
 });
 document.getElementById('extBtnIniciar').addEventListener('click', extAplicar);
 document.getElementById('extBtnInsertar').addEventListener('click', () => extOperar('insertar'));

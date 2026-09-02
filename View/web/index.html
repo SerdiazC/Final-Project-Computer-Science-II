@@ -159,9 +159,7 @@
     <section class="vista-menu vista" id="vista-externas" hidden>
         <h2>Búsquedas externas</h2>
         <div class="grid-principal">
-            <button class="boton-grande" data-externo="LINEAL">Búsqueda externa lineal</button>
-            <button class="boton-grande" data-externo="BINARIA">Búsqueda externa binaria</button>
-            <button class="boton-grande" data-externo="HASH MOD">Búsqueda externa hash</button>
+            <button class="boton-grande" id="btnVerExternasDinamicas">Búsquedas externas dinámicas</button>
         </div>
         <button class="btn-volver" data-volver="vista-algoritmos">← Volver</button>
     </section>
@@ -170,6 +168,34 @@
     <section class="tarjeta vista" id="vista-externometodo" hidden>
         <h2 id="extTituloMetodo"></h2>
         <p class="ayuda" id="extAyudaMetodo"></p>
+
+        <div class="fila funcion" id="extSelectorMetodo" hidden>
+            <fieldset>
+                <legend>Método de búsqueda</legend>
+                <label class="radio">
+                    <input type="radio" name="extMetodoDinamico" value="LINEAL" checked>
+                    Búsqueda externa lineal
+                </label>
+                <label class="radio">
+                    <input type="radio" name="extMetodoDinamico" value="BINARIA">
+                    Búsqueda externa binaria
+                </label>
+            </fieldset>
+        </div>
+
+        <div class="fila funcion">
+            <fieldset>
+                <legend>Búsquedas externas dinámicas: tipo de estructura</legend>
+                <label class="radio">
+                    <input type="radio" name="extTipo" value="TOTAL" checked>
+                    Total: al expandir duplica el nº de cubetas (y al reducir vuelve a la mitad)
+                </label>
+                <label class="radio">
+                    <input type="radio" name="extTipo" value="PARCIAL">
+                    Parcial: al expandir crece un 50 % (4→6→8→12→16…) y reduce al total anterior
+                </label>
+            </fieldset>
+        </div>
 
         <div class="fila">
             <label>

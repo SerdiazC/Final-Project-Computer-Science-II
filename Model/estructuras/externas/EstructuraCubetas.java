@@ -70,6 +70,17 @@ public class EstructuraCubetas {
     /** Cubetas que hay en cada fila (número de columnas). */
     private int cubetasPorFila;
 
+    /** Tipo de estructura dinámica: "TOTAL" (duplica) o "PARCIAL" (+50%). */
+    private String tipoEstructura;
+
+    /**
+     * Historial de totales de cubetas (último elemento = total actual). Lo
+     * usa el crecimiento PARCIAL: "cada total nuevo es el doble del total de
+     * dos expansiones atrás" (4 → 6 → 8 → 12 → 16 → 24 ...), y su reducción,
+     * que vuelve al total anterior.
+     */
+    private final List<Integer> historialTotales = new ArrayList<>();
+
     /** Última expansión total registrada (para la visualización). */
     private int ultimaExpansionTotal;
 
@@ -86,7 +97,7 @@ public class EstructuraCubetas {
      */
     public EstructuraCubetas(int digitosClave, int cubetasIniciales)
             throws ExcepcionEstructura {
-        this(digitosClave, Math.min(cubetasIniciales, 64), 1);
+        this(digitosClave, Math.min(cubetasIniciales, 64), 1, "TOTAL");
     }
 
     /**
@@ -102,11 +113,42 @@ public class EstructuraCubetas {
      */
     public EstructuraCubetas(int digitosClave, int cubetasPorFila, int filas)
             throws ExcepcionEstructura {
+        this(digitosClave, cubetasPorFila, filas, "TOTAL");
+    }
+
+    /**
+     * Crea la estructura externa organizando las cubetas en FILAS y declara
+     * el TIPO de crecimiento dinámico:
+     * <ul>
+     *   <li>"TOTAL": al expandir se DUPLICA el número de cubetas (y al
+     *       reducir se vuelve a la mitad).</li>
+     *   <li>"PARCIAL": al expandir crece un 50 % siguiendo la regla "cada
+     *       total nuevo es el doble del total de dos expansiones atrás"
+     *       (4 → 6 → 8 → 12 → 16 → 24 ...) y al reducir vuelve al total
+     *       anterior.</li>
+     * </ul>
+     * En ambos casos las claves se insertan con el hash mod tradicional.
+     *
+     * @param digitosClave   cifras exactas de las claves (1..7).
+     * @param cubetasPorFila cubetas que caben en cada fila (mínimo 2).
+     * @param filas          número de filas de cubetas (mínimo 1).
+     * @param tipo           "TOTAL" o "PARCIAL".
+     * @throws ExcepcionEstructura si la cifra o el tipo quedan fuera de rango.
+     */
+    public EstructuraCubetas(int digitosClave, int cubetasPorFila, int filas,
+            String tipo) throws ExcepcionEstructura {
         if (digitosClave < 1 || digitosClave > 7) {
             throw new ClaveInvalidaException(
                     "La cantidad de dígitos debe estar entre 1 y 7, se recibió: "
                             + digitosClave);
         }
+        if (tipo == null
+                || (!tipo.equals("TOTAL") && !tipo.equals("PARCIAL"))) {
+            throw new ClaveInvalidaException(
+                    "Tipo de estructura no válido: " + tipo
+                            + " (debe ser TOTAL o PARCIAL).");
+        }
+        this.tipoEstructura = tipo;
         this.digitosClave = digitosClave;
         int total = Math.max(2,
                 Math.min(Math.max(2, cubetasPorFila) * Math.max(1, filas), 64));
@@ -116,6 +158,8 @@ public class EstructuraCubetas {
         this.cubetas = new Cubeta[total];
         crearCubetas(total);
         this.cantidadRegistros = 0;
+        this.historialTotales.clear();
+        this.historialTotales.add(total);
         this.ultimaExpansionTotal = 0;
         this.ultimaExpansionParcial = -1;
     }
@@ -190,23 +234,63 @@ public class EstructuraCubetas {
     }
 
     /**
-     * Verifica la densidad global: si alcanza el límite, duplica el número
-     * de cubetas y vuelve a disponer TODAS las claves (rehash). La nueva
-     * distribución suele eliminar colisiones previas.
+     * Verifica la densidad global: si alcanza el límite, crece la estructura
+     * según su tipo (TOTAL duplica; PARCIAL +50 % con la regla de "dos
+     * expansiones atrás") y vuelve a disponer TODAS las claves (rehash).
      */
     private void verificarExpansion() {
         double densidad = densidadExpansion();
         if (densidad >= LIMITE_EXPANSION) {
-            expansionTotal();
+            if ("PARCIAL".equals(tipoEstructura)) {
+                expansionParcial();
+            } else {
+                expansionTotal();
+            }
         }
     }
 
+    /** Expansión TOTAL: duplica el número de cubetas (organiza las mismas filas). */
     private void expansionTotal() {
-        int[] registros = obtenerClavesPlanas();
         int nuevaCantidad = cubetas.length * 2;
+        rehacerHistorial(nuevaCantidad);
+        ultimaExpansionTotal = nuevaCantidad;
+        ultimaExpansionParcial = -1;
+    }
+
+    /**
+     * Expansión PARCIAL: crece un 50 % siguiendo la regla de la estructura
+     * dinámica parcial — "cada total nuevo es el doble del total de dos
+     * expansiones atrás" — de modo que siempre quede un número entero.
+     * La secuencia partiendo de 4 es: 4 → 6 → 8 → 12 → 16 → 24 → 32 ...
+     * (la primera expansión usa el +50 %; las siguientes usan el doble de
+     * dos atrás). Mantiene las mismas filas y añade columnas.
+     */
+    private void expansionParcial() {
+        int nuevoTotal;
+        if (historialTotales.size() >= 2) {
+            int totalDosAtras = historialTotales.get(
+                    historialTotales.size() - 2);
+            nuevoTotal = totalDosAtras * 2;
+        } else {
+            nuevoTotal = Math.max(2,
+                    Math.round(cubetas.length * 1.5f));
+        }
+        rehacerHistorial(nuevoTotal);
+        ultimaExpansionTotal = 0;
+        ultimaExpansionParcial = 1;
+    }
+
+    /**
+     * Ajusta el arreglo de cubetas al nuevo total, registra el total en el
+     * historial y re-dispone todas las claves con el hash mod del nuevo total.
+     */
+    private void rehacerHistorial(int nuevaCantidad) {
+        int[] registros = obtenerClavesPlanas();
         numeroCubetas = nuevaCantidad;
         crearCubetas(nuevaCantidad);
-        // Mantiene la organizacion en filas: las mismas filas y mas columnas.
+        while (filas > 1 && nuevaCantidad % filas != 0) {
+            filas--;
+        }
         cubetasPorFila = nuevaCantidad / filas;
         cantidadRegistros = 0;
         for (int r : registros) {
@@ -214,8 +298,7 @@ public class EstructuraCubetas {
             cubetas[pos].insertar(r);
             cantidadRegistros++;
         }
-        ultimaExpansionTotal = nuevaCantidad;
-        ultimaExpansionParcial = -1;
+        historialTotales.add(nuevaCantidad);
     }
 
     // ========================================================================
@@ -257,36 +340,57 @@ public class EstructuraCubetas {
 
     private void verificarReduccion() {
         if (cantidadRegistros > 0 && cubetas.length > 2) {
-            int nuevaCantidad = Math.max(2, cubetas.length / 2);
-            double densidadTrasReduc
-                    = (double) cantidadRegistros / nuevaCantidad;
-            if (densidadTrasReduc <= 1.05) {
-                // Simula la rehash para contar cuántas cubetas quedarían
-                // ocupadas; si ≥ 75 % se dispararía expansión de vuelta.
-                Set<Integer> ocupadasSimuladas = new HashSet<>();
-                for (int i = 0; i < cubetas.length; i++) {
-                    for (int clave : cubetas[i].getDatos()) {
-                        int pos = Math.abs(clave % nuevaCantidad);
-                        ocupadasSimuladas.add(pos);
+            int nuevaCantidad
+                    = "PARCIAL".equals(tipoEstructura)
+                            ? totalAnteriorParcial()
+                            : Math.max(2, cubetas.length / 2);
+            if (nuevaCantidad >= 2 && nuevaCantidad < cubetas.length) {
+                double densidadTrasReduc
+                        = (double) cantidadRegistros / nuevaCantidad;
+                if (densidadTrasReduc <= 1.05) {
+                    // Simula la rehash para contar cuántas cubetas quedarían
+                    // ocupadas; si ≥ 75 % se dispararía expansión de vuelta.
+                    Set<Integer> ocupadasSimuladas = new HashSet<>();
+                    for (int i = 0; i < cubetas.length; i++) {
+                        for (int clave : cubetas[i].getDatos()) {
+                            int pos = Math.abs(clave % nuevaCantidad);
+                            ocupadasSimuladas.add(pos);
+                        }
                     }
-                }
-                double densidadOcupadas
-                        = (double) ocupadasSimuladas.size() / nuevaCantidad;
-                if (densidadOcupadas < LIMITE_EXPANSION) {
-                    int[] registros = obtenerClavesPlanas();
-                    numeroCubetas = nuevaCantidad;
-                    while (filas > 1 && nuevaCantidad % filas != 0) {
-                        filas--;
-                    }
-                    cubetasPorFila = nuevaCantidad / filas;
-                    crearCubetas(nuevaCantidad);
-                    cantidadRegistros = 0;
-                    for (int r : registros) {
-                        cubetas[obtenerPosicion(r)].insertar(r);
-                        cantidadRegistros++;
+                    double densidadOcupadas
+                            = (double) ocupadasSimuladas.size() / nuevaCantidad;
+                    if (densidadOcupadas < LIMITE_EXPANSION) {
+                        reducirA(nuevaCantidad);
                     }
                 }
             }
+        }
+    }
+
+    /** Total anterior de una estructura PARCIAL (o 0 si no hay a dónde volver). */
+    private int totalAnteriorParcial() {
+        if (historialTotales.size() < 2) {
+            return 0;
+        }
+        return historialTotales.get(historialTotales.size() - 2);
+    }
+
+    /** Reduce la estructura al total indicado, quitándolo del historial. */
+    private void reducirA(int nuevaCantidad) {
+        int[] registros = obtenerClavesPlanas();
+        numeroCubetas = nuevaCantidad;
+        while (filas > 1 && nuevaCantidad % filas != 0) {
+            filas--;
+        }
+        cubetasPorFila = nuevaCantidad / filas;
+        crearCubetas(nuevaCantidad);
+        cantidadRegistros = 0;
+        for (int r : registros) {
+            cubetas[obtenerPosicion(r)].insertar(r);
+            cantidadRegistros++;
+        }
+        if (historialTotales.size() >= 2) {
+            historialTotales.remove(historialTotales.size() - 1);
         }
     }
 
@@ -398,6 +502,11 @@ public class EstructuraCubetas {
     /** @return capacidad base de las cubetas: cada cubeta guarda 1 elemento. */
     public int getCapacidadBase() {
         return 1;
+    }
+
+    /** @return tipo de estructura dinámica: "TOTAL" o "PARCIAL". */
+    public String getTipoEstructura() {
+        return tipoEstructura;
     }
 
     /** @return número de filas en que se organizan las cubetas. */

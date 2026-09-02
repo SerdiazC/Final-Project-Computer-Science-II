@@ -417,6 +417,57 @@ button.mudo:hover {
     flex-wrap: nowrap;
 }
 
+/* ---------- Índices de filas y columnas (búsquedas externas) ---------- */
+.ext-grilla-externa {
+    display: inline-flex;
+    flex-direction: column;
+    gap: 4px;
+    align-items: flex-start;
+}
+
+.ext-fila-col-indices {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+}
+
+.ext-fila-col-indices .ext-indice-fila {
+    visibility: hidden;
+}
+
+.ext-indice-fila {
+    min-width: 34px;
+    height: 34px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1rem;
+    font-weight: 700;
+    color: #ffffff;
+    background: linear-gradient(135deg, #7b5bd6, #9a6cf0);
+    border-radius: 10px;
+    box-shadow: 0 2px 6px rgba(123, 91, 214, 0.4);
+}
+
+.ext-indice-col {
+    min-width: 84px;
+    margin-bottom: 2px;
+    text-align: center;
+    font-size: 1rem;
+    font-weight: 700;
+    color: #ffffff;
+    background: linear-gradient(135deg, #0f9f9c, #18c0b8);
+    border-radius: 10px;
+    padding: 6px 0;
+    box-shadow: 0 2px 6px rgba(15, 159, 156, 0.4);
+}
+
+.ext-fila-con-indice {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+
 /* Grilla COMPLETA de la tabla hash: todas las direcciones, reordenadas en
    filas para ocupar el ancho disponible y animar cualquier posición. */
 .fila-celdas.completa {
