@@ -625,6 +625,31 @@ button.mudo:hover {
     border: 2px dashed #e5b4a6;
 }
 
+/* Chips de leyenda del árbol de residuos MÚLTIPLES. */
+.leyenda-mul {
+    width: 16px;
+    height: 16px;
+    border-radius: 5px;
+    display: inline-block;
+    border: 1px solid var(--borde);
+}
+.leyenda-mul.raiz {
+    background: #fdf3f0;
+    border: 2px dashed #e5b4a6;
+}
+.leyenda-mul.enlace2 {
+    background: #e3e9fb;
+    border: 2px solid #b7c6f0;
+}
+.leyenda-mul.enlace1 {
+    background: #eef5f6;
+    border: 2px dashed var(--borde);
+}
+.leyenda-mul.letra {
+    background: #fff3cd;
+    border: 2px solid #e6c35c;
+}
+
 /* El panel de proceso deja de flotar sobre el grafo; va como tarjeta normal. */
 .arbol-cabecera .columna-proceso {
     position: static;
@@ -1257,6 +1282,215 @@ button.mudo:hover {
 .nodoletras.enlace .infodig {
     color: #b25b3f;
     background: rgba(255, 255, 255, 0.7);
+}
+
+/* Nodo del árbol de residuos MÚLTIPLES (reutiliza la forma del grafo). */
+.nodo-mul {
+    background: #e3e9fb;
+    border: 2px solid #b7c6f0;
+    border-radius: 14px;
+    padding: 8px 12px;
+    text-align: center;
+    min-width: 64px;
+    box-shadow: 0 2px 6px rgba(80, 100, 180, 0.12);
+    transition: background 0.18s ease, border-color 0.18s ease;
+}
+.arbol-grafo .nodo-mul {
+    position: absolute;
+    width: 72px;
+    box-sizing: border-box;
+    z-index: 1;
+}
+.nodo-mul .letragrande {
+    font-weight: 800;
+    font-size: 1.15rem;
+    line-height: 1.1;
+    color: #3a4f9e;
+}
+.nodo-mul .infodig {
+    display: inline-block;
+    margin-top: 3px;
+    font-size: 0.6rem;
+    color: #6b78a5;
+    background: rgba(255, 255, 255, 0.6);
+    border-radius: 999px;
+    padding: 1px 7px;
+}
+.nodo-mul.raiz {
+    background: #fdf3f0;
+    border: 2px dashed #e5b4a6;
+    color: #b25b3f;
+}
+.nodo-mul.raiz .letragrande {
+    color: #c9876f;
+}
+.nodo-mul.enlace1 {
+    background: #eef5f6;
+    border-style: dashed;
+    border-color: var(--borde);
+}
+.nodo-mul.enlace1 .letragrande {
+    color: var(--texto-suave);
+}
+.nodo-mul.letra {
+    background: #fff3cd;
+    border: 2px solid #e6c35c;
+}
+.nodo-mul.letra .letragrande {
+    color: #8a6d1a;
+}
+.nodo-mul.comparando {
+    animation: nodomul-compara 0.6s ease;
+    border-color: #e6c35c;
+    box-shadow: 0 0 0 3px rgba(230, 195, 92, 0.4);
+}
+.nodo-mul.hallado {
+    border-color: #1e7a4f;
+    background: #dff3e6;
+    box-shadow: 0 0 0 3px rgba(30, 122, 79, 0.3);
+}
+.nodo-mul.insertando {
+    animation: nodomul-inserta 0.9s ease;
+    border-color: #2c6cd6;
+}
+@keyframes nodomul-compara {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.12); }
+    100% { transform: scale(1); }
+}
+@keyframes nodomul-inserta {
+    0% { transform: scale(1); background: #cfe0ff; }
+    50% { transform: scale(1.15); background: #ffe8a3; }
+    100% { transform: scale(1); background: #fff3cd; }
+}
+
+/* ---------- Árbol de Huffman ---------- */
+
+/* Nodo del árbol de Huffman (reutiliza la forma del grafo). */
+.nodo-huff {
+    background: #e8eefb;
+    border: 2px solid #b7c6f0;
+    border-radius: 14px;
+    padding: 8px 12px;
+    text-align: center;
+    min-width: 88px;
+    box-shadow: 0 2px 6px rgba(80, 100, 180, 0.12);
+    transition: background 0.18s ease, border-color 0.18s ease;
+}
+.arbol-grafo .nodo-huff {
+    position: absolute;
+    width: 112px;
+    box-sizing: border-box;
+    z-index: 1;
+}
+.nodo-huff .letragrande {
+    font-weight: 800;
+    font-size: 1.05rem;
+    line-height: 1.15;
+    color: #3a4f9e;
+}
+.nodo-huff .infodig {
+    display: inline-block;
+    margin-top: 3px;
+    font-size: 0.62rem;
+    color: #6b78a5;
+    background: rgba(255, 255, 255, 0.6);
+    border-radius: 999px;
+    padding: 1px 7px;
+}
+.nodo-huff .expresion {
+    display: block;
+    margin-top: 4px;
+    font-size: 0.58rem;
+    color: #6b78a5;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+}
+.nodo-huff.hoja {
+    background: #fff3cd;
+    border: 2px solid #e6c35c;
+}
+.nodo-huff.hoja .letragrande {
+    color: #8a6d1a;
+}
+.nodo-huff.interno {
+    background: #e8eefb;
+    border: 2px solid #b7c6f0;
+}
+
+/* Chips de leyenda del árbol de Huffman. */
+.leyenda-huff {
+    width: 16px;
+    height: 16px;
+    border-radius: 5px;
+    display: inline-block;
+    border: 1px solid var(--borde);
+}
+.leyenda-huff.hoja {
+    background: #fff3cd;
+    border: 2px solid #e6c35c;
+}
+.leyenda-huff.nodo {
+    background: #e8eefb;
+    border: 2px solid #b7c6f0;
+}
+
+/* Tabla de frecuencias de Huffman. */
+.huff-caja-tabla {
+    margin-top: 10px;
+    overflow: auto;
+    max-height: 210px;
+    border: 1px solid var(--borde);
+    border-radius: 10px;
+    background: #ffffff;
+}
+.huff-tabla {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+.huff-tabla th {
+    background: #eef3f7;
+    padding: 6px 8px;
+    text-align: left;
+    position: sticky;
+    top: 0;
+    color: var(--texto);
+}
+.huff-tabla td {
+    padding: 5px 8px;
+    border-top: 1px solid var(--borde);
+    color: var(--texto);
+}
+.huff-tabla .huff-car {
+    font-weight: 800;
+    color: var(--acento-oscuro);
+}
+.huff-tabla code {
+    background: #f1f4f8;
+    padding: 1px 6px;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    color: #8a6d1a;
+}
+
+/* Caja de la ecuación agrupada final. */
+.huff-caja-ecuacion {
+    margin-top: 10px;
+    background: #f6f9fa;
+    border: 1px dashed var(--borde);
+    border-radius: 10px;
+    padding: 10px 12px;
+}
+.huff-ecuacion-texto {
+    display: block;
+    margin-top: 4px;
+    white-space: normal;
+    word-break: break-word;
+    font-size: 0.85rem;
+    color: #8a6d1a;
 }
 
 /* Etiquetas de arista: bit 0 (verde) / bit 1 (naranja). */

@@ -29,10 +29,12 @@
                     <button class="nav-opcion" id="navOpLineal">Búsqueda lineal</button>
                     <button class="nav-opcion" id="navOpBinaria">Búsqueda binaria</button>
                     <button class="nav-opcion" id="navOpTransformacion">Transformación de claves</button>
+                    <button class="nav-opcion" id="navOpHuffman">Árbol de Huffman</button>
                     <div class="nav-separador"></div>
                     <span class="nav-subtitulo">Búsquedas por residuos</span>
                     <button class="nav-opcion" id="navOpArbolDigital">Árbol de búsqueda digital</button>
-                    <button class="nav-opcion" id="navOpResiduos">Árbol por residuos</button>
+                    <button class="nav-opcion" id="navOpResiduosLetras">Búsqueda por residuos (letras)</button>
+                    <button class="nav-opcion" id="navOpResiduosMultiples">Búsqueda por residuos (múltiples)</button>
                 </div>
             </div>
 
@@ -79,7 +81,7 @@
         <button class="btn-volver" data-volver="vista-inicio">← Volver</button>
     </section>
 
-    <!-- ============ VISTA: BÚSQUEDAS INTERNAS (4 BOTONES) ============ -->
+    <!-- ============ VISTA: BÚSQUEDAS INTERNAS ============ -->
     <section class="vista-menu vista" id="vista-internas" hidden>
         <h2>Búsquedas internas</h2>
         <div class="grid-principal">
@@ -87,18 +89,18 @@
             <button class="boton-grande" data-metodo="BINARIA">Búsqueda binaria</button>
             <button class="boton-grande" id="btnVerTransformacion">Búsqueda por transformación de claves</button>
             <button class="boton-grande" id="btnVerResiduos">Búsquedas por residuos</button>
+            <button class="boton-grande" id="btnVerHuffman">Árbol de Huffman</button>
         </div>
         <button class="btn-volver" data-volver="vista-algoritmos">← Volver</button>
     </section>
 
-    <!-- ============ VISTA: BÚSQUEDAS POR RESIDUOS (3 ÁRBOLES) ============ -->
+    <!-- ============ VISTA: BÚSQUEDAS POR RESIDUOS ============ -->
     <section class="vista-menu vista" id="vista-residuos" hidden>
         <h2>Búsquedas por residuos</h2>
         <div class="grid-principal">
             <button class="boton-grande" id="btnVerArbolDigitalLetras">Árbol de búsqueda digital</button>
             <button class="boton-grande" id="btnVerResiduosLetras">Búsqueda por residuos (letras)</button>
-            <button class="boton-grande" data-metodo="ARBOL POR RESIDUOS">Árbol de búsqueda por residuos</button>
-            <button class="boton-grande mudo" id="btnVerResiduosMultiples">Árbol de búsqueda por residuos múltiples</button>
+            <button class="boton-grande" id="btnVerResiduosMultiples">Árbol de búsqueda por residuos múltiples</button>
         </div>
         <button class="btn-volver" data-volver="vista-internas">← Volver</button>
     </section>
@@ -421,6 +423,148 @@
         </div>
 
         <button class="btn-volver" data-volver="vista-residuos">← Volver</button>
+    </section>
+
+    <!-- ============ VISTA: BÚSQUEDA POR RESIDUOS MÚLTIPLES (HOJA) ============ -->
+    <section class="tarjeta vista" id="vista-residuomultiples" hidden>
+        <h2>Árbol de búsqueda por residuos múltiples</h2>
+        <p class="ayuda" id="mulAyuda">
+            Mismo mecanismo de siempre: posición de la letra en el alfabeto
+            (A=1..Z=26) y su binario FIJO a 5 cifras. La diferencia está en la
+            creación del árbol: cada nivel agrupa VARIAS cifras binarias. La
+            RAÍZ es siempre vacía, de ella cuelgan SIEMPRE 4 nodos de enlace
+            (00, 01, 10, 11), de cada uno cuelgan otras 4 (00, 01, 10, 11) y de
+            cada una 2 (0, 1). Al insertar una letra, los números de los
+            enlaces recorridos se concatenan y forman la cifra binaria completa.
+        </p>
+
+        <div id="mulZonaOperaciones">
+            <div class="fila">
+                <label>
+                    Letra (A-Z)
+                    <input type="text" id="mulLetra" maxlength="1" autocomplete="off">
+                </label>
+                <button id="mulBtnInsertar">Insertar</button>
+                <button id="mulBtnBuscar" class="principal">Buscar</button>
+                <button id="mulBtnEliminar" class="peligro">Eliminar</button>
+            </div>
+            <div id="mulMensaje" class="aviso"></div>
+            <div class="fila estructura-fila">
+                <button id="mulBtnReiniciar" class="peligro">Limpiar y empezar de cero</button>
+            </div>
+
+            <div class="arbol-cabecera">
+                <div class="arbol-panel">
+                    <h3>Árbol activo</h3>
+                    <div id="mulEstadoEstructura" class="aviso"></div>
+                    <div id="mulEstadoAnimacion" class="estado-animacion"></div>
+                    <div class="arbol-controles">
+                        <button id="mulZoomMenos" class="gris zoom-boton" title="Alejar (Ctrl + rueda)">−</button>
+                        <span id="mulZoomEtiqueta" class="zoom-etiqueta">Encajar</span>
+                        <button id="mulZoomMas" class="gris zoom-boton" title="Acercar (Ctrl + rueda)">+</button>
+                        <button id="mulZoomEncajar" title="Ajustar el árbol al espacio disponible">Encajar</button>
+                    </div>
+                    <div class="arbol-resumen">
+                        <span class="arbol-resumen-nombre">Letras insertadas</span>
+                        <span class="arbol-resumen-chips" id="mulResumenLetras">(vacío)</span>
+                    </div>
+                    <div class="arbol-leyenda">
+                        <span class="leyenda-item"><i class="leyenda-mul raiz"></i>Raíz vacía</span>
+                        <span class="leyenda-item"><i class="leyenda-mul enlace2"></i>Enlace 2 cifras</span>
+                        <span class="leyenda-item"><i class="leyenda-mul enlace1"></i>Enlace 1 cifra</span>
+                        <span class="leyenda-item"><i class="leyenda-mul letra"></i>Letra</span>
+                    </div>
+                </div>
+                <div class="arbol-panel columna-proceso">
+                    <h3>Proceso de la operación</h3>
+                    <div id="mulListaPasos" class="lista-pasos"></div>
+                </div>
+            </div>
+
+            <div class="piloto piloto-arbol">
+                <div class="arbol-marco" id="mulMarcoArbol">
+                    <div id="mulVisualArbol" class="arbol-contenido"></div>
+                </div>
+            </div>
+        </div>
+
+        <button class="btn-volver" data-volver="vista-residuos">← Volver</button>
+    </section>
+
+    <!-- ============ VISTA: ÁRBOL DE HUFFMAN (HOJA) ============ -->
+    <section class="tarjeta vista" id="vista-huffman" hidden>
+        <h2>Árbol de Huffman</h2>
+        <p class="ayuda" id="huffAyuda">
+            Digite una palabra usando SOLO letras (A-Z) y el guion bajo "_"
+            para simbolizar el espacio entre palabras. El aplicativo cuenta
+            cuántas veces se repite cada carácter, ordena la tabla de
+            frecuencias (de mayor a menor; en empate, el primer escrito va más
+            abajo) y agrupa SIEMPRE los dos de menor frecuencia hasta dejar
+            una sola ecuación, que es la que genera el árbol.
+        </p>
+
+        <div id="huffZonaOperaciones">
+            <div class="fila">
+                <label>
+                    Palabra
+                    <input type="text" id="huffPalabra" maxlength="80"
+                        autocomplete="off" placeholder="ej: ABRACADABRA_COCINA">
+                </label>
+                <button id="huffBtnProcesar" class="principal">Generar árbol</button>
+            </div>
+            <div id="huffMensaje" class="aviso"></div>
+            <div class="fila estructura-fila">
+                <button id="huffBtnReiniciar" class="peligro">Limpiar y empezar de cero</button>
+            </div>
+
+            <div class="arbol-cabecera">
+                <div class="arbol-panel">
+                    <h3>Frecuencias y árbol activo</h3>
+                    <div id="huffEstadoEstructura" class="aviso"></div>
+                    <div id="huffCajaTabla" class="huff-caja-tabla">
+                        <table class="huff-tabla">
+                            <thead>
+                                <tr>
+                                    <th>Carácter</th>
+                                    <th>Cantidad</th>
+                                    <th>Frecuencia</th>
+                                    <th>Código</th>
+                                </tr>
+                            </thead>
+                            <tbody id="huffCuerpoTabla"></tbody>
+                        </table>
+                    </div>
+                    <div class="huff-caja-ecuacion">
+                        <span class="arbol-resumen-nombre">Ecuación agrupada</span>
+                        <code id="huffEcuacion" class="huff-ecuacion-texto">(—)</code>
+                    </div>
+                    <div class="arbol-controles">
+                        <button id="huffZoomMenos" class="gris zoom-boton" title="Alejar (Ctrl + rueda)">−</button>
+                        <span id="huffZoomEtiqueta" class="zoom-etiqueta">Encajar</span>
+                        <button id="huffZoomMas" class="gris zoom-boton" title="Acercar (Ctrl + rueda)">+</button>
+                        <button id="huffZoomEncajar" title="Ajustar el árbol al espacio disponible">Encajar</button>
+                    </div>
+                    <div class="arbol-leyenda">
+                        <span class="leyenda-item"><i class="leyenda-huff hoja"></i>Carácter (hoja)</span>
+                        <span class="leyenda-item"><i class="leyenda-huff nodo"></i>Nodo agrupado</span>
+                        <span class="leyenda-item"><i class="leyenda-bit bit0"></i>Rama 0</span>
+                        <span class="leyenda-item"><i class="leyenda-bit bit1"></i>Rama 1</span>
+                    </div>
+                </div>
+                <div class="arbol-panel columna-proceso">
+                    <h3>Proceso de agrupación</h3>
+                    <div id="huffListaPasos" class="lista-pasos"></div>
+                </div>
+            </div>
+
+            <div class="piloto piloto-arbol">
+                <div class="arbol-marco" id="huffMarcoArbol">
+                    <div id="huffVisualArbol" class="arbol-contenido"></div>
+                </div>
+            </div>
+        </div>
+
+        <button class="btn-volver" data-volver="vista-internas">← Volver</button>
     </section>
 
     <!-- ============ VISTA: PLACEHOLDER (SIN FUNCIONALIDAD) ============ -->

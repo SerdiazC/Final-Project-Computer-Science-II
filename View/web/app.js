@@ -1009,10 +1009,14 @@ document.getElementById('navOpBinaria').addEventListener('click', () =>
     navegarDesdeNav(() => abrirMetodo('BINARIA')));
 document.getElementById('navOpTransformacion').addEventListener('click', () =>
     navegarDesdeNav(abrirTransformacion));
+document.getElementById('navOpHuffman').addEventListener('click', () =>
+    navegarDesdeNav(abrirHuffman));
 document.getElementById('navOpArbolDigital').addEventListener('click', () =>
     navegarDesdeNav(abrirArbolDigital));
-document.getElementById('navOpResiduos').addEventListener('click', () =>
-    navegarDesdeNav(() => abrirMetodo('ARBOL POR RESIDUOS')));
+document.getElementById('navOpResiduosLetras').addEventListener('click', () =>
+    navegarDesdeNav(abrirResiduosLetras));
+document.getElementById('navOpResiduosMultiples').addEventListener('click', () =>
+    navegarDesdeNav(abrirResiduosMultiples));
 
 // Opción externa del menú superior.
 document.getElementById('navOpExternasDinamicas').addEventListener('click', () =>
@@ -1051,10 +1055,6 @@ document.getElementById('btnVerTransformacion').addEventListener('click', () => 
 document.getElementById('btnVerResiduos').addEventListener('click', () => {
     navegarA('vista-residuos',
         ['Algoritmos de búsqueda', 'Búsquedas internas', 'Búsquedas por residuos']);
-});
-document.getElementById('btnVerResiduosMultiples').addEventListener('click', () => {
-    abrirPlaceholder('Árbol de búsqueda por residuos múltiples',
-        'Esta estructura aún no está implementada en el aplicativo.');
 });
 
 // --- Botones "Volver" estáticos ---
@@ -2677,4 +2677,976 @@ resMarco.addEventListener('wheel', (evento) => {
 }, { passive: false });
 resMarco.addEventListener('dblclick', () => {
     resZoomEncajar();
+});
+
+/* ======================================================================
+ * ÁRBOL DE BÚSQUEDA POR RESIDUOS MÚLTIPLES
+ * (raíz vacía + esqueleto fijo de enlaces 4→4→2 + letras)
+ * ======================================================================
+ */
+
+let mulEstado = { seleccionHecha: false, estructura: {} };
+
+/** true mientras una animación del árbol de residuos múltiples está en curso. */
+let mulAnimando = false;
+
+/** Límites del zoom manual del árbol de residuos múltiples. */
+const MUL_ESCALA_MIN = 0.05;
+const MUL_ESCALA_MAX = 3;
+
+/** true mientras el zoom queda en modo "Encajar". */
+let mulZoomAuto = true;
+
+/** Factor de zoom manual vigente (usado si mulZoomAuto es false). */
+let mulEscala = 1;
+
+/** Recarga el estado del árbol de residuos múltiples desde el servidor. */
+async function mulRecargarEstado() {
+    mulEstado = await llamarApi('/api/multiples/estado');
+    mulPintarAviso();
+    mulActualizarResumen();
+    mulDibujar();
+    return mulEstado;
+}
+
+/** Lista las letras insertadas (recorrido en orden) en la tarjeta izquierda. */
+function mulActualizarResumen() {
+    const zona = document.getElementById('mulResumenLetras');
+    if (!zona) {
+        return;
+    }
+    const letras = [];
+    (function recorrer(nodo) {
+        if (!nodo) {
+            return;
+        }
+        (nodo.hijos || []).forEach((h) => recorrer(h));
+        if (nodo.letra) {
+            letras.push(nodo.letra);
+        }
+    })(mulEstado && mulEstado.estructura ? mulEstado.estructura.raiz : null);
+    zona.innerHTML = '';
+    if (!letras.length) {
+        zona.textContent = '(vacío)';
+        return;
+    }
+    letras.forEach((letra) => {
+        const chip = document.createElement('span');
+        chip.className = 'chip-letra';
+        chip.textContent = letra;
+        zona.appendChild(chip);
+    });
+}
+
+/** Abre la hoja de residuos múltiples desde el menú de residuos. */
+function abrirResiduosMultiples() {
+    document.getElementById('mulLetra').value = '';
+    document.getElementById('mulMensaje').textContent =
+        'Digite una letra A-Z para insertarla, buscarla o eliminarla.';
+    document.getElementById('mulMensaje').classList.remove('error', 'exito');
+    document.getElementById('mulEstadoEstructura').textContent = '';
+    document.getElementById('mulEstadoAnimacion').textContent = '';
+    document.getElementById('mulVisualArbol').innerHTML = '';
+    document.getElementById('mulListaPasos').innerHTML = '';
+    document.getElementById('mulZoomEtiqueta').textContent = 'Encajar';
+    mulZoomAuto = true;
+    mulEscala = 1;
+
+    navegarA('vista-residuomultiples',
+        ['Algoritmos de búsqueda', 'Búsquedas internas',
+            'Búsquedas por residuos', 'Árbol de búsqueda por residuos múltiples']);
+    mulRecargarEstado().catch((error) => {
+        mulMostrarMensaje('Error conectando con el servidor: '
+            + error.message, true);
+    });
+}
+
+/** Muestra un aviso en la hoja de residuos múltiples. */
+function mulMostrarMensaje(texto, esError) {
+    const aviso = document.getElementById('mulMensaje');
+    aviso.textContent = texto;
+    aviso.classList.remove('error', 'exito');
+    aviso.classList.add(esError ? 'error' : 'exito');
+}
+
+/** Bloquea o habilita los botones de residuos múltiples durante la operación. */
+function mulBloquearBotones(bloquear) {
+    ['mulBtnInsertar', 'mulBtnBuscar', 'mulBtnEliminar', 'mulBtnReiniciar'
+    ].forEach((id) => {
+        document.getElementById(id).disabled = bloquear;
+    });
+}
+
+/** Agrega una línea al registro de proceso de residuos múltiples. */
+function mulAnadirLog(texto, esError) {
+    const contenedor = document.getElementById('mulListaPasos');
+    const div = document.createElement('div');
+    div.className = 'paso ' + (esError ? 'error' : 'encontrado');
+    div.innerHTML = '<span class="numero">' + (esError ? 'Error' : 'Hecho')
+        + '</span><span class="detalle">' + escapeHtml(texto) + '</span>';
+    contenedor.appendChild(div);
+    contenedor.scrollTop = contenedor.scrollHeight;
+}
+
+/** Lista los pasos de forma estática (sin animación) en residuos múltiples. */
+function mulLogEstatico(pasos) {
+    const contenedor = document.getElementById('mulListaPasos');
+    contenedor.innerHTML = '';
+    (pasos || []).forEach((paso) => {
+        const div = document.createElement('div');
+        div.className = 'paso';
+        div.innerHTML = '<span class="numero">Paso ' + paso.numero
+            + '</span><span class="detalle">' + escapeHtml(paso.descripcion)
+            + '</span>';
+        contenedor.appendChild(div);
+    });
+    contenedor.scrollTop = contenedor.scrollHeight;
+}
+
+/** Actualiza el aviso de estado de residuos múltiples. */
+function mulPintarAviso() {
+    const aviso = document.getElementById('mulEstadoEstructura');
+    const cantidad = mulEstado.estructura.cantidad || 0;
+    aviso.textContent = cantidad === 0
+        ? 'El árbol está vacío: la RAÍZ y el esqueleto de enlaces ya están '
+            + 'creados; solo falta insertar letras.'
+        : 'Letras colocadas: ' + cantidad + ' de 26.';
+    aviso.classList.remove('error', 'exito');
+}
+
+/**
+ * Dibuja el árbol de residuos múltiples COMO UN GRAFO. Cada nodo puede tener
+ * 4 o 2 hijos (o ser hoja con letra). El trazado hace un recorrido que asigna
+ * x por hoja (las hojas reparten el ancho) y coloca cada nodo interno en el
+ * punto medio de sus hijos; la profundidad da la fila y. Las aristas se
+ * etiquetan con el enlace del hijo (00, 01, 10, 11, 0 o 1).
+ */
+function mulDibujar() {
+    const visual = document.getElementById('mulVisualArbol');
+    visual.innerHTML = '';
+    const marco = document.getElementById('mulMarcoArbol');
+    const raiz = mulEstado.estructura.raiz;
+    if (!raiz) {
+        visual.textContent = '(árbol sin nodos)';
+        document.getElementById('mulZoomEtiqueta').textContent = 'Encajar';
+        return;
+    }
+
+    const AN = 78; // ancho del nodo
+    const X_PASO = 118; // separación horizontal entre columnas de hojas
+    const Y_PASO = 132; // separación vertical entre profundidades
+    const PAD = 40;
+    const altoNodo = 64;
+
+    // 1) Asignar posiciones: x = punto medio de los hijos (hojas reparten X).
+    // El nivel 3 (nodos 0/1) SOLO se dibuja cuando tiene letra; los nodos sin
+    // descendencia visible (o hojas) se tratan como hojas del trazado.
+    const posMap = new Map();
+    let xLeaves = 0;
+    let maxProf = 0;
+    (function recorrer(nodo, prof, ruta) {
+        // Nivel 3: hoja que se muestra únicamente si guarda una letra.
+        if (nodo.nivel === 3) {
+            if (!nodo.letra) {
+                return null;
+            }
+            posMap.set(nodo, { x: xLeaves, y: prof, ruta: ruta });
+            xLeaves++;
+            maxProf = Math.max(maxProf, prof);
+            return { left: xLeaves - 1, right: xLeaves - 1 };
+        }
+        let left = Infinity;
+        let right = -Infinity;
+        let tieneHijos = false;
+        (nodo.hijos || []).forEach((hijo) => {
+            if (!hijo) {
+                return;
+            }
+            const span = recorrer(hijo, prof + 1,
+                ruta + (hijo.etiqueta || ''));
+            if (span) {
+                left = Math.min(left, span.left);
+                right = Math.max(right, span.right);
+                tieneHijos = true;
+            }
+        });
+        if (!tieneHijos) {
+            // Sin descendencia visible: se traza como hoja propia.
+            posMap.set(nodo, { x: xLeaves, y: prof, ruta: ruta });
+            xLeaves++;
+            maxProf = Math.max(maxProf, prof);
+            return { left: xLeaves - 1, right: xLeaves - 1 };
+        }
+        const x = (left + right) / 2;
+        posMap.set(nodo, { x: x, y: prof, ruta: ruta });
+        maxProf = Math.max(maxProf, prof);
+        return { left: left, right: right };
+    })(raiz, 0, '');
+
+    const ancho = PAD * 2 + (xLeaves - 1) * X_PASO + AN;
+    const alto = PAD * 2 + maxProf * Y_PASO + altoNodo;
+
+    const escala = mulObtenerEscala(marco, ancho, alto);
+    mulActualizarControlZoom(escala);
+
+    const grafo = document.createElement('div');
+    grafo.className = 'arbol-grafo';
+    grafo.style.width = ancho + 'px';
+    grafo.style.height = alto + 'px';
+
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('class', 'arbol-lineas');
+    svg.setAttribute('width', ancho);
+    svg.setAttribute('height', alto);
+
+    const centroX = (p) => PAD + p.x * X_PASO + AN / 2;
+    const centroY = (p) => PAD + p.y * Y_PASO + altoNodo / 2;
+
+    posMap.forEach((pos, nodo) => {
+        const hijos = nodo.hijos || [];
+        hijos.forEach((hijo) => {
+            if (!hijo) {
+                return;
+            }
+            const posHijo = posMap.get(hijo);
+            if (!posHijo) {
+                return;
+            }
+            const x1 = centroX(pos);
+            const y1 = centroY(pos);
+            const x2 = centroX(posHijo);
+            const y2 = centroY(posHijo);
+
+            const linea = document.createElementNS(
+                'http://www.w3.org/2000/svg', 'line');
+            linea.setAttribute('class', 'arbol-lado lado0');
+            linea.setAttribute('x1', x1);
+            linea.setAttribute('y1', y1);
+            linea.setAttribute('x2', x2);
+            linea.setAttribute('y2', y2);
+            svg.appendChild(linea);
+
+            const etiqueta = document.createElementNS(
+                'http://www.w3.org/2000/svg', 'text');
+            etiqueta.setAttribute('class', 'arbol-bit bit0');
+            etiqueta.setAttribute('x', (x1 + x2) / 2);
+            etiqueta.setAttribute('y', (y1 + y2) / 2 - 5);
+            etiqueta.textContent = hijo.etiqueta || '';
+            svg.appendChild(etiqueta);
+        });
+    });
+
+    grafo.appendChild(svg);
+
+    posMap.forEach((pos, nodo) => {
+        const nodoDom = mulConstruirNodo(nodo, pos.ruta);
+        nodoDom.style.left = (PAD + pos.x * X_PASO) + 'px';
+        nodoDom.style.top = (PAD + pos.y * Y_PASO) + 'px';
+        grafo.appendChild(nodoDom);
+    });
+
+    const zoom = document.createElement('div');
+    zoom.className = 'arbol-zoom';
+    zoom.style.width = Math.round(ancho * escala) + 'px';
+    zoom.style.height = Math.round(alto * escala) + 'px';
+    zoom.style.transform = 'scale(' + escala + ')';
+
+    const anchoMarco = Math.max(marco.clientWidth || 600, 100);
+    const altoMarco = Math.max(marco.clientHeight || 500, 100);
+    const sobraX = Math.max(0, Math.round((anchoMarco - ancho * escala) / 2));
+    const sobraY = Math.max(0, Math.round((altoMarco - alto * escala) / 2));
+    zoom.style.marginLeft = sobraX + 'px';
+    zoom.style.marginTop = sobraY + 'px';
+
+    zoom.appendChild(grafo);
+    visual.appendChild(zoom);
+}
+
+/** Devuelve la escala de dibujo de residuos múltiples. */
+function mulObtenerEscala(marco, ancho, alto) {
+    let escala;
+    if (mulZoomAuto) {
+        const anchoMarco = Math.max(marco.clientWidth || 600, 100) - 28;
+        const altoMarco = Math.max(marco.clientHeight || 500, 100) - 28;
+        escala = Math.min(anchoMarco / ancho, altoMarco / alto, 1.25);
+    } else {
+        escala = mulEscala;
+    }
+    escala = Math.max(MUL_ESCALA_MIN,
+        Math.min(MUL_ESCALA_MAX, escala));
+    mulEscala = escala;
+    return escala;
+}
+
+/** Muestra el porcentaje de zoom vigente en el control. */
+function mulActualizarControlZoom(escala) {
+    const etiqueta = document.getElementById('mulZoomEtiqueta');
+    if (etiqueta) {
+        etiqueta.textContent = Math.round(escala * 100) + ' %';
+    }
+}
+
+/** Aleja el árbol de residuos múltiples un 20 %. */
+function mulZoomMenos() {
+    mulZoomAuto = false;
+    mulEscala = Math.max(MUL_ESCALA_MIN,
+        Math.round(mulEscala * 0.8 * 100) / 100);
+    mulDibujar();
+}
+
+/** Acerca el árbol de residuos múltiples un 25 %. */
+function mulZoomMas() {
+    mulZoomAuto = false;
+    mulEscala = Math.min(MUL_ESCALA_MAX,
+        Math.round(mulEscala * 1.25 * 100) / 100);
+    mulDibujar();
+}
+
+/** Vuelve al modo "Encajar" en residuos múltiples. */
+function mulZoomEncajar() {
+    mulZoomAuto = true;
+    mulDibujar();
+}
+
+/** Construye el nodo visible de residuos múltiples (sin layout). */
+function mulConstruirNodo(nodo, ruta) {
+    const caja = document.createElement('div');
+    caja.dataset.ruta = ruta || '';
+
+    let clase = 'nodo-mul ';
+    let contenido;
+    let dataLetra = '';
+    if (nodo.nivel === 0) {
+        clase += 'raiz';
+        contenido = 'Raíz';
+    } else if (nodo.nivel === 3) {
+        // Hoja: muestra su enlace (0/1) como texto pequeño y la letra grande.
+        dataLetra = nodo.letra || '';
+        if (nodo.letra) {
+            clase += 'letra';
+            contenido = escapeHtml(nodo.letra);
+        } else {
+            contenido = '&mdash;';
+        }
+    } else {
+        // Nodos de enlace de nivel 1 y 2.
+        contenido = escapeHtml(nodo.etiqueta);
+    }
+    caja.className = clase;
+    if (dataLetra) {
+        caja.dataset.letra = dataLetra;
+    }
+    caja.innerHTML = '<span class="letragrande">' + contenido + '</span>'
+        + (nodo.nivel === 3 && nodo.letra ? '<br><span class="infodig">pos '
+            + nodo.posicion + '</span>' : '');
+    return caja;
+}
+
+/** Localiza el nodo visible de residuos múltiples por su letra. */
+function mulUbicarLetra(letra) {
+    return document.querySelector(
+        '#mulVisualArbol .nodo-mul[data-letra="' + letra + '"]');
+}
+
+/** Localiza el nodo visible de residuos múltiples por su ruta. */
+function mulUbicarRuta(ruta) {
+    return document.querySelector('#mulVisualArbol .nodo-mul[data-ruta="'
+        + ruta + '"]');
+}
+
+/**
+ * Reproduce la búsqueda de una letra animada en el árbol de residuos
+ * múltiples: resalta cada nodo (enlace o hoja) visitado según su ruta.
+ */
+async function mulAnimarBusqueda(pasos, encontrada, letra) {
+    const pasosLog = document.getElementById('mulListaPasos');
+    pasosLog.innerHTML = '';
+
+    let previo = null;
+    for (const paso of pasos) {
+        if (previo) {
+            previo.classList.remove('comparando');
+        }
+        document.getElementById('mulEstadoAnimacion').textContent =
+            'Paso ' + paso.numero + ': ' + paso.descripcion;
+        let nodo = null;
+        if (paso.ruta && paso.ruta !== '') {
+            nodo = mulUbicarRuta(paso.ruta);
+        }
+        if (nodo) {
+            nodo.classList.add('comparando');
+            nodo.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            previo = nodo;
+        } else {
+            previo = null;
+        }
+        const div = document.createElement('div');
+        div.className = 'paso';
+        div.innerHTML = '<span class="numero">Paso ' + paso.numero
+            + '</span><span class="detalle">' + escapeHtml(paso.descripcion)
+            + '</span>';
+        pasosLog.appendChild(div);
+        pasosLog.scrollTop = pasosLog.scrollHeight;
+        await new Promise((resolver) => setTimeout(resolver, 520));
+    }
+    if (previo) {
+        previo.classList.remove('comparando');
+    }
+
+    if (encontrada) {
+        const hallado = mulUbicarLetra(letra);
+        if (hallado) {
+            hallado.classList.remove('comparando');
+            hallado.classList.add('hallado');
+            hallado.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            setTimeout(() => hallado.classList.remove('hallado'), 2200);
+        }
+    }
+    document.getElementById('mulEstadoAnimacion').textContent = '';
+}
+
+/** Resalta brevemente el nodo que acaba de insertarse o eliminarse. */
+function mulResaltar(letra) {
+    const nodo = mulUbicarLetra(letra);
+    if (!nodo) {
+        return;
+    }
+    nodo.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    nodo.classList.add('insertando');
+    setTimeout(() => nodo.classList.remove('insertando'), 1200);
+}
+
+/** Operación genérica de residuos múltiples (insertar/buscar/eliminar). */
+async function mulOperar(operacion) {
+    if (mulAnimando) {
+        return;
+    }
+    const valor = document.getElementById('mulLetra').value.trim();
+    if (!/^[a-zA-Z]$/.test(valor)) {
+        mulMostrarMensaje('Digite una sola letra A-Z.', true);
+        return;
+    }
+    const letra = valor.toUpperCase();
+
+    mulAnimando = true;
+    mulBloquearBotones(true);
+    try {
+        const ruta = '/api/multiples/' + operacion + '?letra=' + letra;
+        const resultado = await llamarApi(ruta);
+
+        if (operacion === 'buscar') {
+            await mulRecargarEstado();
+            await mulAnimarBusqueda(resultado.pasos || [], resultado.encontrada, letra);
+            mulAnadirLog(resultado.mensaje, !resultado.encontrada);
+            mulMostrarMensaje(resultado.mensaje, !resultado.encontrada);
+        } else {
+            document.getElementById('mulListaPasos').innerHTML = '';
+            if (!resultado.ok) {
+                mulAnadirLog(resultado.mensaje, true);
+                mulMostrarMensaje(resultado.mensaje, true);
+                return;
+            }
+            await mulRecargarEstado();
+            mulLogEstatico(resultado.pasos);
+            mulResaltar(letra);
+            mulAnadirLog(resultado.mensaje, false);
+            mulMostrarMensaje(resultado.mensaje, false);
+        }
+    } catch (error) {
+        mulMostrarMensaje('Error conectando con el servidor: '
+            + error.message, true);
+    } finally {
+        mulAnimando = false;
+        mulBloquearBotones(false);
+    }
+}
+
+/** Limpia el árbol de residuos múltiples y deja la hoja operativa. */
+async function mulReiniciar() {
+    if (mulAnimando) {
+        return;
+    }
+    mulAnimando = true;
+    mulBloquearBotones(true);
+    try {
+        const resultado = await llamarApi('/api/multiples/reiniciar');
+        await mulRecargarEstado();
+        document.getElementById('mulLetra').value = '';
+        document.getElementById('mulListaPasos').innerHTML = '';
+        document.getElementById('mulEstadoAnimacion').textContent = '';
+        mulMostrarMensaje(resultado.mensaje, false);
+    } catch (error) {
+        mulMostrarMensaje('Error limpiando: ' + error.message, true);
+    } finally {
+        mulAnimando = false;
+        mulBloquearBotones(false);
+    }
+}
+
+// --- Eventos de residuos múltiples ---
+document.getElementById('btnVerResiduosMultiples').addEventListener('click', () =>
+    abrirResiduosMultiples());
+document.getElementById('mulBtnInsertar').addEventListener('click', () => mulOperar('insertar'));
+document.getElementById('mulBtnBuscar').addEventListener('click', () => mulOperar('buscar'));
+document.getElementById('mulBtnEliminar').addEventListener('click', () => mulOperar('eliminar'));
+document.getElementById('mulBtnReiniciar').addEventListener('click', mulReiniciar);
+document.getElementById('mulLetra').addEventListener('keydown', (evento) => {
+    if (evento.key === 'Enter') {
+        mulOperar('insertar');
+    }
+});
+document.getElementById('mulLetra').addEventListener('input', (evento) => {
+    evento.target.value = evento.target.value
+        .replace(/[^a-zA-Z]/g, '').slice(0, 1).toUpperCase();
+});
+
+// --- Zoom de residuos múltiples ---
+document.getElementById('mulZoomMenos').addEventListener('click', mulZoomMenos);
+document.getElementById('mulZoomMas').addEventListener('click', mulZoomMas);
+document.getElementById('mulZoomEncajar').addEventListener('click', mulZoomEncajar);
+const mulMarco = document.getElementById('mulMarcoArbol');
+mulMarco.addEventListener('wheel', (evento) => {
+    if (!evento.ctrlKey) {
+        return;
+    }
+    evento.preventDefault();
+    mulZoomAuto = false;
+    if (evento.deltaY < 0) {
+        mulEscala = Math.min(MUL_ESCALA_MAX,
+            Math.round(mulEscala * 1.15 * 100) / 100);
+    } else {
+        mulEscala = Math.max(MUL_ESCALA_MIN,
+            Math.round(mulEscala * 0.87 * 100) / 100);
+    }
+    mulDibujar();
+}, { passive: false });
+mulMarco.addEventListener('dblclick', () => {
+    mulZoomEncajar();
+});
+
+/* ======================================================================
+ * ÁRBOL DE HUFFMAN
+ * (compresión por frecuencias: palabra → tabla → ecuación → árbol)
+ * ======================================================================
+ */
+
+let huffEstado = { seleccionHecha: false, estructura: { procesada: false } };
+
+/** true mientras una operación del árbol de Huffman está en curso. */
+let huffAnimando = false;
+
+/** Límites del zoom manual del árbol de Huffman. */
+const HUFF_ESCALA_MIN = 0.05;
+const HUFF_ESCALA_MAX = 3;
+
+/** true mientras el zoom queda en modo "Encajar". */
+let huffZoomAuto = true;
+
+/** Factor de zoom manual vigente (usado si huffZoomAuto es false). */
+let huffEscala = 1;
+
+/** Recarga el estado del árbol de Huffman desde el servidor. */
+async function huffRecargarEstado() {
+    huffEstado = await llamarApi('/api/huffman/estado');
+    huffPintarAviso();
+    huffDibujarTabla();
+    huffLogEstatico(huffEstado.estructura.pasos || []);
+    huffDibujar();
+    return huffEstado;
+}
+
+/** Abre la hoja del árbol de Huffman y recarga su estado. */
+function abrirHuffman() {
+    document.getElementById('huffPalabra').value = '';
+    document.getElementById('huffMensaje').textContent = '';
+    document.getElementById('huffMensaje').classList.remove('error', 'exito');
+    document.getElementById('huffListaPasos').innerHTML = '';
+
+    navegarA('vista-huffman',
+        ['Algoritmos de búsqueda', 'Búsquedas internas', 'Árbol de Huffman']);
+    huffRecargarEstado().catch((error) => {
+        huffMostrarMensaje('Error conectando con el servidor: '
+            + error.message, true);
+    });
+}
+
+/** Muestra un aviso en la hoja del árbol de Huffman. */
+function huffMostrarMensaje(texto, esError) {
+    const aviso = document.getElementById('huffMensaje');
+    aviso.textContent = texto;
+    aviso.classList.remove('error', 'exito');
+    aviso.classList.add(esError ? 'error' : 'exito');
+}
+
+/** Bloquea o habilita los botones del árbol de Huffman durante la operación. */
+function huffBloquearBotones(bloquear) {
+    ['huffBtnProcesar', 'huffBtnReiniciar'].forEach((id) => {
+        document.getElementById(id).disabled = bloquear;
+    });
+}
+
+/** Agrega una línea al registro de proceso del árbol de Huffman. */
+function huffAnadirLog(texto, esError) {
+    const contenedor = document.getElementById('huffListaPasos');
+    const div = document.createElement('div');
+    div.className = 'paso ' + (esError ? 'error' : 'encontrado');
+    div.innerHTML = '<span class="numero">' + (esError ? 'Error' : 'Hecho')
+        + '</span><span class="detalle">' + escapeHtml(texto) + '</span>';
+    contenedor.appendChild(div);
+    contenedor.scrollTop = contenedor.scrollHeight;
+}
+
+/** Lista los pasos del proceso de forma estática (sin animación). */
+function huffLogEstatico(pasos) {
+    const contenedor = document.getElementById('huffListaPasos');
+    contenedor.innerHTML = '';
+    if (!pasos || pasos.length === 0) {
+        const div = document.createElement('div');
+        div.className = 'paso';
+        div.innerHTML = '<span class="numero">—</span><span class="detalle">'
+            + 'Aún no hay proceso: digite una palabra y pulse Generar '
+            + 'árbol.</span>';
+        contenedor.appendChild(div);
+        return;
+    }
+    pasos.forEach((paso) => {
+        const div = document.createElement('div');
+        div.className = 'paso';
+        div.innerHTML = '<span class="numero">Paso ' + paso.numero
+            + '</span><span class="detalle">' + escapeHtml(paso.descripcion)
+            + '</span>';
+        contenedor.appendChild(div);
+    });
+    contenedor.scrollTop = contenedor.scrollHeight;
+}
+
+/** Actualiza el aviso de estado del árbol de Huffman. */
+function huffPintarAviso() {
+    const aviso = document.getElementById('huffEstadoEstructura');
+    const est = huffEstado.estructura;
+    if (!est.procesada) {
+        aviso.textContent = 'Sin palabra procesada todavía: digite una '
+            + 'palabra (letras y "_") y pulse Generar árbol.';
+        aviso.classList.remove('error', 'exito');
+        return;
+    }
+    const caracteres = (est.tabla || []).length;
+    aviso.textContent = 'Palabra: "' + est.palabra + '" (' + est.total
+        + ' caracteres; ' + caracteres + ' distintos).';
+    aviso.classList.remove('error', 'exito');
+}
+
+/** Frecuencia corta con 3 decimales (punto como separador). */
+function huffTextoFrecuencia(valor) {
+    return (Math.round(valor * 1000) / 1000).toFixed(3);
+}
+
+/** Dibuja la tabla de frecuencias y la ecuación agrupada. */
+function huffDibujarTabla() {
+    const cuerpo = document.getElementById('huffCuerpoTabla');
+    const ecuacion = document.getElementById('huffEcuacion');
+    const est = huffEstado.estructura;
+    cuerpo.innerHTML = '';
+    if (!est.procesada) {
+        ecuacion.textContent = '(—)';
+        const fila = document.createElement('tr');
+        fila.innerHTML = '<td colspan="4">(vacío)</td>';
+        cuerpo.appendChild(fila);
+        return;
+    }
+    ecuacion.textContent = est.ecuacion || '(—)';
+    const total = est.total || 1;
+    (est.tabla || []).forEach((fila) => {
+        const tr = document.createElement('tr');
+        const caracter = fila.caracter === '_' ? '_' : fila.caracter;
+        const porcentaje = Math.round(fila.frecuencia * 100);
+        tr.innerHTML = '<td class="huff-car">' + escapeHtml(caracter)
+            + '</td><td>' + fila.cantidad + '</td><td>' + fila.cantidad + '/'
+            + total + ' · ' + porcentaje + '%</td><td><code>'
+            + escapeHtml(fila.codigo || '—') + '</code></td>';
+        cuerpo.appendChild(tr);
+    });
+}
+
+/**
+ * Dibuja el árbol de Huffman COMO UN GRAFO. Es un árbol binario: el trazado
+ * recorre en orden (izquierda → raíz → derecha) asignando x por hoja y la
+ * profundidad da la fila y. Las aristas se etiquetan con el bit (0 o 1).
+ */
+function huffDibujar() {
+    const visual = document.getElementById('huffVisualArbol');
+    visual.innerHTML = '';
+    const marco = document.getElementById('huffMarcoArbol');
+    const est = huffEstado.estructura;
+    if (!est.procesada || !est.raiz) {
+        visual.textContent = '(aún no se ha generado el árbol)';
+        document.getElementById('huffZoomEtiqueta').textContent = 'Encajar';
+        return;
+    }
+    const raiz = est.raiz;
+
+    const AN = 112; // ancho del nodo
+    const X_PASO = 132; // separación horizontal entre hojas
+    const Y_PASO = 120; // separación vertical entre profundidades
+    const PAD = 56;
+    const altoNodo = 66;
+
+    // 1) Recorrido en orden: x secuencial por hoja, y = profundidad.
+    const posiciones = [];
+    let contadorX = 0;
+    let maxProfundidad = 0;
+    (function recorrer(nodo, profundidad) {
+        if (!nodo) {
+            return;
+        }
+        recorrer(nodo.izq, profundidad + 1);
+        posiciones.push({ nodo: nodo, x: contadorX, y: profundidad });
+        contadorX++;
+        if (profundidad > maxProfundidad) {
+            maxProfundidad = profundidad;
+        }
+        recorrer(nodo.der, profundidad + 1);
+    })(raiz, 0);
+
+    const ancho = PAD * 2 + (contadorX - 1) * X_PASO + AN;
+    const alto = PAD * 2 + maxProfundidad * Y_PASO + altoNodo;
+
+    const escala = huffObtenerEscala(marco, ancho, alto);
+    huffActualizarControlZoom(escala);
+
+    const grafo = document.createElement('div');
+    grafo.className = 'arbol-grafo';
+    grafo.style.width = ancho + 'px';
+    grafo.style.height = alto + 'px';
+
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+    svg.setAttribute('class', 'arbol-lineas');
+    svg.setAttribute('width', ancho);
+    svg.setAttribute('height', alto);
+
+    const centroX = (p) => PAD + p.x * X_PASO + AN / 2;
+    const centroY = (p) => PAD + p.y * Y_PASO + altoNodo / 2;
+
+    posiciones.forEach((pos) => {
+        const nodo = pos.nodo;
+        [['izq', '0'], ['der', '1']].forEach((par) => {
+            const hijo = nodo[par[0]];
+            if (!hijo) {
+                return;
+            }
+            const posHijo = posiciones.find((p) => p.nodo === hijo);
+            if (!posHijo) {
+                return;
+            }
+            const x1 = centroX(pos);
+            const y1 = centroY(pos);
+            const x2 = centroX(posHijo);
+            const y2 = centroY(posHijo);
+
+            const linea = document.createElementNS(
+                'http://www.w3.org/2000/svg', 'line');
+            linea.setAttribute('class',
+                'arbol-lado ' + (par[1] === '0' ? 'lado0' : 'lado1'));
+            linea.setAttribute('x1', x1);
+            linea.setAttribute('y1', y1);
+            linea.setAttribute('x2', x2);
+            linea.setAttribute('y2', y2);
+            svg.appendChild(linea);
+
+            const etiqueta = document.createElementNS(
+                'http://www.w3.org/2000/svg', 'text');
+            etiqueta.setAttribute('class',
+                'arbol-bit ' + (par[1] === '0' ? 'bit0' : 'bit1'));
+            etiqueta.setAttribute('x', (x1 + x2) / 2);
+            etiqueta.setAttribute('y', (y1 + y2) / 2 - 5);
+            etiqueta.textContent = par[1];
+            svg.appendChild(etiqueta);
+        });
+    });
+
+    grafo.appendChild(svg);
+
+    posiciones.forEach((pos) => {
+        const nodoDom = huffConstruirNodo(pos.nodo);
+        nodoDom.style.left = (PAD + pos.x * X_PASO) + 'px';
+        nodoDom.style.top = (PAD + pos.y * Y_PASO) + 'px';
+        grafo.appendChild(nodoDom);
+    });
+
+    const zoom = document.createElement('div');
+    zoom.className = 'arbol-zoom';
+    zoom.style.width = Math.round(ancho * escala) + 'px';
+    zoom.style.height = Math.round(alto * escala) + 'px';
+    zoom.style.transform = 'scale(' + escala + ')';
+
+    const anchoMarco = Math.max(marco.clientWidth || 600, 100);
+    const altoMarco = Math.max(marco.clientHeight || 500, 100);
+    const sobraX = Math.max(0, Math.round((anchoMarco - ancho * escala) / 2));
+    const sobraY = Math.max(0, Math.round((altoMarco - alto * escala) / 2));
+    zoom.style.marginLeft = sobraX + 'px';
+    zoom.style.marginTop = sobraY + 'px';
+
+    zoom.appendChild(grafo);
+    visual.appendChild(zoom);
+}
+
+/** Devuelve la escala de dibujo del árbol de Huffman. */
+function huffObtenerEscala(marco, ancho, alto) {
+    let escala;
+    if (huffZoomAuto) {
+        const anchoMarco = Math.max(marco.clientWidth || 600, 100) - 28;
+        const altoMarco = Math.max(marco.clientHeight || 500, 100) - 28;
+        escala = Math.min(anchoMarco / ancho, altoMarco / alto, 1.25);
+    } else {
+        escala = huffEscala;
+    }
+    escala = Math.max(HUFF_ESCALA_MIN, Math.min(HUFF_ESCALA_MAX, escala));
+    huffEscala = escala;
+    return escala;
+}
+
+/** Muestra el porcentaje de zoom vigente en el control. */
+function huffActualizarControlZoom(escala) {
+    const etiqueta = document.getElementById('huffZoomEtiqueta');
+    if (etiqueta) {
+        etiqueta.textContent = Math.round(escala * 100) + ' %';
+    }
+}
+
+/** Aleja el árbol de Huffman un 20 %. */
+function huffZoomMenos() {
+    huffZoomAuto = false;
+    huffEscala = Math.max(HUFF_ESCALA_MIN,
+        Math.round(huffEscala * 0.8 * 100) / 100);
+    huffDibujar();
+}
+
+/** Acerca el árbol de Huffman un 25 %. */
+function huffZoomMas() {
+    huffZoomAuto = false;
+    huffEscala = Math.min(HUFF_ESCALA_MAX,
+        Math.round(huffEscala * 1.25 * 100) / 100);
+    huffDibujar();
+}
+
+/** Vuelve al modo "Encajar" en el árbol de Huffman. */
+function huffZoomEncajar() {
+    huffZoomAuto = true;
+    huffDibujar();
+}
+
+/** Construye el nodo visible del árbol de Huffman (sin layout). */
+function huffConstruirNodo(nodo) {
+    const caja = document.createElement('div');
+    if (nodo.caracter) {
+        // Hoja: carácter grande + frecuencia pequeña.
+        caja.className = 'nodo-huff hoja';
+        caja.dataset.letra = nodo.caracter;
+        const porcentaje = Math.round(nodo.frecuencia * 100);
+        caja.innerHTML = '<span class="letragrande">'
+            + escapeHtml(nodo.caracter) + '</span><br><span class="infodig">'
+            + porcentaje + '% (' + huffTextoFrecuencia(nodo.frecuencia)
+            + ')</span>';
+    } else {
+        // Nodo interno: frecuencia acumulada + subecuación.
+        caja.className = 'nodo-huff interno';
+        caja.title = nodo.expresion || '';
+        caja.innerHTML = '<span class="letragrande">'
+            + huffTextoFrecuencia(nodo.frecuencia)
+            + '</span><br><span class="expresion">'
+            + escapeHtml(nodo.expresion || '') + '</span>';
+    }
+    return caja;
+}
+
+/** Procesa la palabra digitada y genera el árbol de Huffman. */
+async function huffProcesar() {
+    if (huffAnimando) {
+        return;
+    }
+    const valor = document.getElementById('huffPalabra').value.trim();
+    if (!/^[a-zA-Z_]+$/.test(valor)) {
+        huffMostrarMensaje('Solo se admiten letras A-Z y el guion bajo "_".',
+            true);
+        return;
+    }
+    huffAnimando = true;
+    huffBloquearBotones(true);
+    try {
+        const resultado = await llamarApi('/api/huffman/procesar?palabra='
+            + encodeURIComponent(valor.toUpperCase()));
+        if (!resultado.ok) {
+            huffMostrarMensaje(resultado.mensaje, true);
+            return;
+        }
+        await huffRecargarEstado();
+        huffMostrarMensaje(resultado.mensaje, false);
+    } catch (error) {
+        huffMostrarMensaje('Error conectando con el servidor: '
+            + error.message, true);
+    } finally {
+        huffAnimando = false;
+        huffBloquearBotones(false);
+    }
+}
+
+/** Limpia el árbol de Huffman y deja la hoja operativa. */
+async function huffReiniciar() {
+    if (huffAnimando) {
+        return;
+    }
+    huffAnimando = true;
+    huffBloquearBotones(true);
+    try {
+        const resultado = await llamarApi('/api/huffman/reiniciar');
+        await huffRecargarEstado();
+        document.getElementById('huffPalabra').value = '';
+        huffMostrarMensaje(resultado.mensaje, false);
+    } catch (error) {
+        huffMostrarMensaje('Error limpiando: ' + error.message, true);
+    } finally {
+        huffAnimando = false;
+        huffBloquearBotones(false);
+    }
+}
+
+// --- Eventos del árbol de Huffman ---
+document.getElementById('btnVerHuffman').addEventListener('click', () =>
+    abrirHuffman());
+document.getElementById('huffBtnProcesar').addEventListener('click',
+    huffProcesar);
+document.getElementById('huffBtnReiniciar').addEventListener('click',
+    huffReiniciar);
+document.getElementById('huffPalabra').addEventListener('keydown', (evento) => {
+    if (evento.key === 'Enter') {
+        huffProcesar();
+    }
+});
+document.getElementById('huffPalabra').addEventListener('input', (evento) => {
+    evento.target.value = evento.target.value
+        .replace(/[^a-zA-Z_]/g, '').slice(0, 80).toUpperCase();
+});
+
+// --- Zoom del árbol de Huffman ---
+document.getElementById('huffZoomMenos').addEventListener('click', huffZoomMenos);
+document.getElementById('huffZoomMas').addEventListener('click', huffZoomMas);
+document.getElementById('huffZoomEncajar').addEventListener('click', huffZoomEncajar);
+const huffMarco = document.getElementById('huffMarcoArbol');
+huffMarco.addEventListener('wheel', (evento) => {
+    if (!evento.ctrlKey) {
+        return;
+    }
+    evento.preventDefault();
+    huffZoomAuto = false;
+    if (evento.deltaY < 0) {
+        huffEscala = Math.min(HUFF_ESCALA_MAX,
+            Math.round(huffEscala * 1.15 * 100) / 100);
+    } else {
+        huffEscala = Math.max(HUFF_ESCALA_MIN,
+            Math.round(huffEscala * 0.87 * 100) / 100);
+    }
+    huffDibujar();
+}, { passive: false });
+huffMarco.addEventListener('dblclick', () => {
+    huffZoomEncajar();
 });

@@ -4,7 +4,9 @@ import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 
 import Controller.GestorArbolDigitalLetras;
+import Controller.GestorArbolHuffman;
 import Controller.GestorArbolResiduosLetras;
+import Controller.GestorArbolResiduosMultiples;
 import Controller.GestorBusquedas;
 import Controller.GestorBusquedasExternas;
 import Model.EstructuraDeDatos;
@@ -12,12 +14,19 @@ import Model.busquedas.PasoBusqueda;
 import Model.busquedas.ResultadoBusqueda;
 import Model.estructuras.EstructuraArbolDigital;
 import Model.estructuras.EstructuraArbolDigitalLetras;
+import Model.estructuras.EstructuraArbolHuffman;
 import Model.estructuras.EstructuraArbolResiduosLetras;
+import Model.estructuras.EstructuraArbolResiduosMultiples;
 import Model.estructuras.EstructuraHash;
+import Model.estructuras.FilaHuffman;
 import Model.estructuras.NodoArbolDigital;
 import Model.estructuras.NodoArbolDigitalLetras;
 import Model.estructuras.NodoArbolResiduosLetras;
+import Model.estructuras.NodoArbolResiduosMultiples;
+import Model.estructuras.NodoHuffman;
 import Model.estructuras.PasoBusquedaLetras;
+import Model.estructuras.PasoBusquedaMultiples;
+import Model.estructuras.PasoHuffman;
 import Model.estructuras.PasoInsercion;
 import Model.excepciones.ExcepcionEstructura;
 import Model.transformaciones.FuncionHash;
@@ -86,6 +95,12 @@ public class ServidorWeb {
     /** Controlador del ÁRBOL DE BÚSQUEDA POR RESIDUOS de LETRAS (raíz vacía). */
     private GestorArbolResiduosLetras arbolResiduos;
 
+    /** Controlador del ÁRBOL DE BÚSQUEDA POR RESIDUOS MÚLTIPLES. */
+    private GestorArbolResiduosMultiples arbolResiduosMultiples;
+
+    /** Controlador del ÁRBOL DE HUFFMAN (compresión por frecuencias). */
+    private GestorArbolHuffman arbolHuffman;
+
     /** Puerta de entrada HTTP del JDK. */
     private HttpServer servidor;
 
@@ -107,6 +122,8 @@ public class ServidorWeb {
                 EstructuraDeDatos.DIGITOS_MINIMOS);
         this.arbolLetras = new GestorArbolDigitalLetras();
         this.arbolResiduos = new GestorArbolResiduosLetras();
+        this.arbolResiduosMultiples = new GestorArbolResiduosMultiples();
+        this.arbolHuffman = new GestorArbolHuffman();
     }
 
     /**
@@ -208,6 +225,22 @@ public class ServidorWeb {
                 responderJson(intercambio, residuosEliminarJson(intercambio));
             } else if (ruta.equals("/api/residuos/reiniciar")) {
                 responderJson(intercambio, residuosReiniciarJson());
+            } else if (ruta.equals("/api/multiples/estado")) {
+                responderJson(intercambio, multiplesEstadoJson());
+            } else if (ruta.equals("/api/multiples/insertar")) {
+                responderJson(intercambio, multiplesInsertarJson(intercambio));
+            } else if (ruta.equals("/api/multiples/buscar")) {
+                responderJson(intercambio, multiplesBuscarJson(intercambio));
+            } else if (ruta.equals("/api/multiples/eliminar")) {
+                responderJson(intercambio, multiplesEliminarJson(intercambio));
+            } else if (ruta.equals("/api/multiples/reiniciar")) {
+                responderJson(intercambio, multiplesReiniciarJson());
+            } else if (ruta.equals("/api/huffman/estado")) {
+                responderJson(intercambio, huffmanEstadoJson());
+            } else if (ruta.equals("/api/huffman/procesar")) {
+                responderJson(intercambio, huffmanProcesarJson(intercambio));
+            } else if (ruta.equals("/api/huffman/reiniciar")) {
+                responderJson(intercambio, huffmanReiniciarJson());
             } else {
                 servirEstatico(intercambio, ruta);
             }
@@ -415,8 +448,8 @@ public class ServidorWeb {
             boolean mantener = leerBoolean(parametros, "mantener");
 
             // Función hash para insertar: obligatoria en toda familia de
-            // arreglo; los árboles de residuos digital (ARBOL DIGITAL y
-            // ARBOL POR RESIDUOS) la ignoran.
+            // arreglo; los árboles de residuos digital (ARBOL DIGITAL) la
+            // ignoran.
             boolean esArbolResiduos = EstructuraDeDatos.TIPO_RESIDUOS_DIGITAL
                     .equals(gestor.getEstructuraDe(metodo));
             FuncionHash funcion = null;
@@ -1310,6 +1343,343 @@ public class ServidorWeb {
         arbolResiduos.reiniciar();
         return okJson("Árbol de residuos de letras reiniciado: queda vacío y "
                 + "listo para empezar de cero.");
+    }
+
+    // ========================================================================
+    // ÁRBOL DE BÚSQUEDA POR RESIDUOS MÚLTIPLES - ENDPOINTS /api/multiples/*
+    // ========================================================================
+
+    /**
+     * Estado del árbol de residuos múltiples: la estructura serializada
+     * (esqueleto fijo: raíz vacía y niveles 1-2-3) para la vista.
+     *
+     * @return literal JSON de estado del árbol de residuos múltiples.
+     */
+    private String multiplesEstadoJson() {
+        return "{\"seleccionHecha\":"
+                + arbolResiduosMultiples.isSeleccionHecha()
+                + ",\"estructura\":" + multiplesEstructuraJson() + '}';
+    }
+
+    /**
+     * Serializa la estructura de residuos múltiples: tipo, cantidad y la
+     * jerarquía del esqueleto con sus etiquetas y letras.
+     *
+     * @return literal JSON de la estructura de residuos múltiples.
+     */
+    private String multiplesEstructuraJson() {
+        EstructuraArbolResiduosMultiples est =
+                arbolResiduosMultiples.getEstructura();
+        StringBuilder json = new StringBuilder("{");
+        json.append("\"tipo\":")
+                .append(SerializadorJson.cadena("RESIDUOS MULTIPLES"));
+        json.append(",\"cantidad\":").append(est.getCantidad());
+        json.append(",\"raiz\":").append(multiplesNodoJson(est.getRaiz()));
+        json.append('}');
+        return json.toString();
+    }
+
+    /**
+     * Serializa un nodo del árbol de residuos múltiples recursivamente (o
+     * null si no existe). Incluye etiqueta, nivel y letra (si es hoja).
+     *
+     * @param nodo nodo del árbol de residuos múltiples.
+     * @return literal JSON del nodo y sus hijos.
+     */
+    private String multiplesNodoJson(NodoArbolResiduosMultiples nodo) {
+        if (nodo == null) {
+            return "null";
+        }
+        StringBuilder json = new StringBuilder("{");
+        json.append("\"etiqueta\":").append(SerializadorJson.cadena(
+                nodo.getEtiqueta()));
+        json.append(",\"nivel\":").append(nodo.getNivel());
+        json.append(",\"letra\":").append(nodo.tieneLetra()
+                ? SerializadorJson.cadena(String.valueOf(nodo.getLetra()))
+                : "null");
+        json.append(",\"posicion\":").append(
+                nodo.tieneLetra() ? nodo.posicionDeLetra() : -1);
+        json.append(",\"hijos\":[");
+        NodoArbolResiduosMultiples[] hijos = nodo.getHijos();
+        if (hijos != null) {
+            for (int i = 0; i < hijos.length; i++) {
+                if (i > 0) {
+                    json.append(',');
+                }
+                json.append(multiplesNodoJson(hijos[i]));
+            }
+        }
+        json.append("]}");
+        return json.toString();
+    }
+
+    /**
+     * Inserta una letra en el árbol de residuos múltiples.
+     *
+     * @param intercambio contexto HTTP con el parámetro letra.
+     * @return JSON de resultado con la letra, posición, binario y pasos.
+     */
+    private String multiplesInsertarJson(HttpExchange intercambio) {
+        Map<String, String> parametros = leerParametros(intercambio);
+        try {
+            char letra = letraObligatoria(parametros, "letra");
+            arbolResiduosMultiples.insertarLetra(letra);
+            int posicion = letra - 'A' + 1;
+            return "{\"ok\":true"
+                    + ",\"mensaje\":" + SerializadorJson.cadena(
+                            "Letra '" + letra + "' insertada (posición "
+                                    + posicion + ", binario fijo "
+                                    + EstructuraArbolDigitalLetras
+                                            .binarioDePosicion(posicion)
+                                    + ").")
+                    + ",\"letra\":" + SerializadorJson.cadena(
+                            String.valueOf(letra))
+                    + ",\"pasos\":" + multiplesPasosJson(
+                            arbolResiduosMultiples.getEstructura()
+                                    .pasosInsercion(letra))
+                    + '}';
+        } catch (ExcepcionEstructura e) {
+            return errorJson(e.getMessage());
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return errorJson(e.getMessage());
+        }
+    }
+
+    /**
+     * Busca una letra en el árbol de residuos múltiples y devuelve sus pasos.
+     *
+     * @param intercambio contexto HTTP con el parámetro letra.
+     * @return JSON con encontrada/pasos/mensaje.
+     */
+    private String multiplesBuscarJson(HttpExchange intercambio) {
+        Map<String, String> parametros = leerParametros(intercambio);
+        try {
+            char letra = letraObligatoria(parametros, "letra");
+            List<PasoBusquedaMultiples> lista =
+                    arbolResiduosMultiples.buscarLetra(letra);
+
+            String pasos = multiplesPasosJson(lista);
+
+            boolean encontrada = !lista.isEmpty()
+                    && lista.get(lista.size() - 1).getLetra() == letra;
+            return "{\"encontrada\":" + encontrada
+                    + ",\"letra\":" + SerializadorJson.cadena(
+                            String.valueOf(letra))
+                    + ",\"mensaje\":" + SerializadorJson.cadena(
+                            encontrada
+                                    ? "La letra '" + letra
+                                            + "' está en el árbol."
+                                    : "La letra '" + letra
+                                            + "' NO está en el árbol.")
+                    + ",\"pasos\":" + pasos + '}';
+        } catch (ExcepcionEstructura e) {
+            return errorJson(e.getMessage());
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return errorJson(e.getMessage());
+        }
+    }
+
+    /**
+     * Elimina una letra del árbol de residuos múltiples (su hoja queda vacía).
+     *
+     * @param intercambio contexto HTTP con el parámetro letra.
+     * @return JSON de resultado.
+     */
+    private String multiplesEliminarJson(HttpExchange intercambio) {
+        Map<String, String> parametros = leerParametros(intercambio);
+        try {
+            char letra = letraObligatoria(parametros, "letra");
+            arbolResiduosMultiples.eliminarLetra(letra);
+            return "{\"ok\":true"
+                    + ",\"pasos\":" + multiplesPasosJson(
+                            arbolResiduosMultiples.getEstructura()
+                                    .pasosInsercion(letra))
+                    + ",\"mensaje\":" + SerializadorJson.cadena(
+                            "Letra '" + letra
+                                    + "' eliminada del árbol: su hoja quedó "
+                                    + "vacía.")
+                    + '}';
+        } catch (ExcepcionEstructura e) {
+            return errorJson(e.getMessage());
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return errorJson(e.getMessage());
+        }
+    }
+
+    /**
+     * Vacía el árbol de residuos múltiples por completo.
+     *
+     * @return JSON de resultado.
+     */
+    private String multiplesReiniciarJson() {
+        arbolResiduosMultiples.reiniciar();
+        return okJson("Árbol de residuos múltiples reiniciado: queda vacío y "
+                + "listo para empezar de cero.");
+    }
+
+    /**
+     * Serializa una lista de pasos del árbol de residuos múltiples.
+     *
+     * @param pasos pasos del recorrido de residuos múltiples.
+     * @return literal JSON con el arreglo de pasos (o [] si no hay).
+     */
+    private String multiplesPasosJson(List<PasoBusquedaMultiples> pasos) {
+        StringBuilder json = new StringBuilder("[");
+        if (pasos != null) {
+            for (int i = 0; i < pasos.size(); i++) {
+                PasoBusquedaMultiples p = pasos.get(i);
+                if (i > 0) {
+                    json.append(',');
+                }
+                json.append("{\"numero\":").append(p.getNumero())
+                        .append(",\"ruta\":").append(SerializadorJson.cadena(
+                                p.getRuta()))
+                        .append(",\"etiqueta\":").append(SerializadorJson.cadena(
+                                p.getEtiqueta()))
+                        .append(",\"letra\":")
+                        .append(p.getLetra() != '\0'
+                                ? SerializadorJson.cadena(
+                                        String.valueOf(p.getLetra()))
+                                : "null")
+                        .append(",\"descripcion\":").append(
+                                SerializadorJson.cadena(p.getDescripcion()))
+                        .append('}');
+            }
+        }
+        json.append(']');
+        return json.toString();
+    }
+
+    // ========================================================================
+    // ÁRBOL DE HUFFMAN (COMPRESIÓN POR FRECUENCIAS)
+    // ========================================================================
+
+    /**
+     * Arma el JSON de estado del árbol de Huffman: si hay una palabra
+     * procesada y, en tal caso, la estructura completa (tabla, pasos, árbol).
+     *
+     * @return literal JSON de estado del árbol de Huffman.
+     */
+    private String huffmanEstadoJson() {
+        return "{\"seleccionHecha\":"
+                + arbolHuffman.isSeleccionHecha()
+                + ",\"estructura\":" + huffmanEstructuraJson() + '}';
+    }
+
+    /**
+     * Serializa la estructura del árbol de Huffman: palabra, total de
+     * caracteres, tabla de frecuencias, pasos del proceso, ecuación final y
+     * la jerarquía del árbol con sus frecuencias.
+     *
+     * @return literal JSON de la estructura (o {"procesada":false} si aún no
+     *         se procesa una palabra).
+     */
+    private String huffmanEstructuraJson() {
+        EstructuraArbolHuffman est = arbolHuffman.getEstructura();
+        if (est == null) {
+            return "{\"procesada\":false}";
+        }
+        StringBuilder json = new StringBuilder("{");
+        json.append("\"procesada\":true");
+        json.append(",\"palabra\":")
+                .append(SerializadorJson.cadena(est.getPalabra()));
+        json.append(",\"total\":").append(est.getTotal());
+        json.append(",\"ecuacion\":")
+                .append(SerializadorJson.cadena(est.getEcuacion()));
+        json.append(",\"tabla\":[");
+        List<FilaHuffman> tabla = est.getTabla();
+        for (int i = 0; i < tabla.size(); i++) {
+            if (i > 0) {
+                json.append(',');
+            }
+            json.append(huffmanFilaJson(tabla.get(i)));
+        }
+        json.append("],\"pasos\":[");
+        List<PasoHuffman> pasos = est.getPasos();
+        for (int i = 0; i < pasos.size(); i++) {
+            if (i > 0) {
+                json.append(',');
+            }
+            json.append(huffmanPasoJson(pasos.get(i)));
+        }
+        json.append("],\"raiz\":")
+                .append(huffmanNodoJson(est.getRaiz()));
+        json.append('}');
+        return json.toString();
+    }
+
+    /** Serializa una fila de la tabla de frecuencias de Huffman. */
+    private String huffmanFilaJson(FilaHuffman fila) {
+        return "{\"caracter\":"
+                + SerializadorJson.cadena(String.valueOf(fila.getCaracter()))
+                + ",\"cantidad\":" + fila.getCantidad()
+                + ",\"frecuencia\":" + fila.getFrecuencia()
+                + ",\"codigo\":"
+                + SerializadorJson.cadena(fila.getCodigo())
+                + '}';
+    }
+
+    /** Serializa un paso del proceso de agrupación de Huffman. */
+    private String huffmanPasoJson(PasoHuffman paso) {
+        return "{\"numero\":" + paso.getNumero()
+                + ",\"descripcion\":"
+                + SerializadorJson.cadena(paso.getDescripcion())
+                + '}';
+    }
+
+    /**
+     * Serializa un nodo del árbol de Huffman recursivamente (o null si no
+     * existe). Incluye el carácter (si es hoja) y sus ramas 0/1.
+     *
+     * @param nodo nodo actual del árbol de Huffman.
+     * @return literal JSON del nodo y sus hijos.
+     */
+    private String huffmanNodoJson(NodoHuffman nodo) {
+        if (nodo == null) {
+            return "null";
+        }
+        StringBuilder json = new StringBuilder("{");
+        json.append("\"caracter\":").append(nodo.esHoja()
+                ? SerializadorJson.cadena(String.valueOf(nodo.getCaracter()))
+                : "null");
+        json.append(",\"frecuencia\":").append(nodo.getFrecuencia());
+        json.append(",\"expresion\":")
+                .append(SerializadorJson.cadena(nodo.getExpresion()));
+        json.append(",\"izq\":").append(huffmanNodoJson(nodo.getIzquierda()));
+        json.append(",\"der\":").append(huffmanNodoJson(nodo.getDerecha()));
+        json.append('}');
+        return json.toString();
+    }
+
+    /**
+     * Procesa una palabra y genera el árbol de Huffman.
+     *
+     * @param intercambio contexto HTTP con el parámetro palabra.
+     * @return JSON de resultado.
+     */
+    private String huffmanProcesarJson(HttpExchange intercambio) {
+        Map<String, String> parametros = leerParametros(intercambio);
+        try {
+            String palabra = textoObligatorio(parametros, "palabra");
+            arbolHuffman.procesar(palabra);
+            return okJson("Árbol de Huffman generado a partir de la palabra '"
+                    + palabra.trim().toUpperCase() + "'.");
+        } catch (ExcepcionEstructura e) {
+            return errorJson(e.getMessage());
+        } catch (IllegalArgumentException | IllegalStateException e) {
+            return errorJson(e.getMessage());
+        }
+    }
+
+    /**
+     * Vacía el árbol de Huffman (la hoja queda lista para una palabra nueva).
+     *
+     * @return JSON de resultado.
+     */
+    private String huffmanReiniciarJson() {
+        arbolHuffman.reiniciar();
+        return okJson("Árbol de Huffman reiniciado: la hoja queda limpia para "
+                + "procesar una palabra nueva.");
     }
 
     /** Obtiene un carácter de letra obligatorio del parámetro. */

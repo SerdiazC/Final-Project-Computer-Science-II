@@ -7,7 +7,6 @@ import java.util.List;
 import java.util.Map;
 
 import Model.EstructuraDeDatos;
-import Model.busquedas.BusquedaArbolPorResiduos;
 import Model.busquedas.BusquedaBinaria;
 import Model.busquedas.BusquedaHashCuadrado;
 import Model.busquedas.BusquedaHashModulo;
@@ -56,8 +55,7 @@ import Model.transformaciones.FuncionHashTruncamiento;
  *   HASH TRUNCAMIENTO    -> transformación TRUNCAMIENTO
  *   HASH PLEGAMIENTO     -> transformación PLEGAMIENTO
  *   RESIDUOS DIGITAL     -> árbol binario guiado por los bits de la clave
- *                          (crecimiento libre; ARBOL DIGITAL y
- *                           ARBOL POR RESIDUOS comparten esta estructura)
+ *                          (crecimiento libre)
  *
  * PRINCIPIOS SOLID AQUÍ VISIBLES:
  *
@@ -137,7 +135,6 @@ public class GestorBusquedas {
         registrarEstrategia(new BusquedaHashTruncamiento());
         registrarEstrategia(new BusquedaHashPlegamiento());
         registrarEstrategia(new BusquedaResiduosDigital());
-        registrarEstrategia(new BusquedaArbolPorResiduos());
 
         // Soluciones de colisión (sin estado: instancias únicas compartidas).
         this.soluciones = new LinkedHashMap<>();
