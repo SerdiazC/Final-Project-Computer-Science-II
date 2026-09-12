@@ -128,11 +128,10 @@ async function recargarEstado() {
 // NAVEGACIÓN EN ÁRBOL
 // ====================================================================
 
-/** Oculta todas las vistas y muestra solo la indicada, con sus migas. */
-function mostrarVista(id, migas) {
+/** Oculta todas las vistas y muestra solo la indicada. */
+function mostrarVista(id) {
     document.querySelectorAll('.vista').forEach((v) => { v.hidden = true; });
     document.getElementById(id).hidden = false;
-    pintarMigas(migas);
 }
 
 /** Navega a una vista nueva guardando la anterior en el historial. */
@@ -154,19 +153,7 @@ function volver() {
 function volverInicio() {
     historial.length = 0;
     historial.push({ id: 'vista-inicio', migas: [] });
-    mostrarVista('vista-inicio', []);
-}
-
-/** Dibuja las migas de pan (ruta de navegación). */
-function pintarMigas(migas) {
-    const ruta = document.getElementById('migaRuta');
-    ruta.innerHTML = '';
-    migas.forEach((texto) => {
-        const etiqueta = document.createElement('span');
-        etiqueta.className = 'miga-paso';
-        etiqueta.textContent = '  › ' + texto;
-        ruta.appendChild(etiqueta);
-    });
+    mostrarVista('vista-inicio');
 }
 
 // ====================================================================
@@ -986,7 +973,6 @@ function escapeHtml(texto) {
 // ====================================================================
 
 // --- Navegación principal ---
-document.getElementById('btnMigaInicio').addEventListener('click', volverInicio);
 
 // --- Menú de navegación superior ---
 document.getElementById('navBtnInicio').addEventListener('click', () => {
@@ -1020,7 +1006,8 @@ document.getElementById('navOpResiduosMultiples').addEventListener('click', () =
 
 // Opción externa del menú superior.
 document.getElementById('navOpExternasDinamicas').addEventListener('click', () =>
-    navegarDesdeNav(extAbrirDinamicas));
+    navegarDesdeNav(() => navegarA('vista-externas',
+        ['Algoritmos de búsqueda', 'Búsquedas externas'])));
 
 // Cierra los desplegables al hacer clic en cualquier otra parte.
 document.addEventListener('click', (evento) => {
@@ -1099,9 +1086,6 @@ let extEstado = { seleccionHecha: false, estructura: {} };
 /** Método de búsqueda externa de la hoja abierta. */
 let extMetodoActual = null;
 
-/** true si la hoja se abrió en modo "búsquedas externas dinámicas" (LINEAL/BINARIA). */
-let extEsDinamica = false;
-
 /** true mientras una animación externa está en curso. */
 let extAnimando = false;
 
@@ -1116,8 +1100,6 @@ async function extRecargarEstado() {
 /** Muestra el método externo en la hoja y navega a su configuración. */
 function extAbrirMetodo(nombre) {
     extMetodoActual = nombre;
-    extEsDinamica = false;
-    document.getElementById('extSelectorMetodo').hidden = true;
     const migas = ['Algoritmos de búsqueda', 'Búsquedas externas', nombre];
 
     document.getElementById('extTituloMetodo').textContent = nombre;
@@ -1136,21 +1118,16 @@ function extAbrirMetodo(nombre) {
 }
 
 /**
- * Abre la hoja "Búsquedas externas dinámicas": muestra un selector para
- * elegir el método (LINEAL/BINARIA) y el tipo de estructura (TOTAL/PARCIAL).
+ * Abre la hoja "Búsquedas externas dinámicas": el método (LINEAL/BINARIA) ya
+ * viene elegido por el botón de entrada; aquí solo se configura el tipo de
+ * estructura (TOTAL/PARCIAL) y los parámetros.
  */
-function extAbrirDinamicas() {
-    extEsDinamica = true;
-    const metodoSel = document.querySelector(
-        'input[name="extMetodoDinamico"]:checked');
-    const metodo = metodoSel ? metodoSel.value : 'LINEAL';
-    extMetodoActual = metodo;
-
-    document.getElementById('extSelectorMetodo').hidden = false;
+function extAbrirDinamicas(metodo) {
+    extMetodoActual = metodo || 'LINEAL';
     document.getElementById('extTituloMetodo').textContent = 'Búsquedas externas dinámicas';
     document.getElementById('extAyudaMetodo').textContent =
-        'Elija el método de búsqueda (LINEAL o BINARIA) y el tipo de estructura '
-        + 'dinámica (TOTAL duplica al expandir, PARCIAL crece un 50 %).';
+        'Elija el tipo de estructura dinámica '
+        + '(TOTAL duplica al expandir, PARCIAL crece un 50 %) y los parámetros.';
     document.getElementById('extZonaOperaciones').hidden = true;
     document.getElementById('extArchivoInput').value = '';
     document.getElementById('extListaPasos').innerHTML = '';
@@ -1165,14 +1142,8 @@ function extAbrirDinamicas() {
         ['Algoritmos de búsqueda', 'Búsquedas externas', 'Búsquedas externas dinámicas']);
 }
 
-/** Lee el método de búsqueda externo activo según el modo de la hoja. */
+/** Devuelve el método de búsqueda externo activo. */
 function extMetodoActivo() {
-    if (extEsDinamica) {
-        const sel = document.querySelector('input[name="extMetodoDinamico"]:checked');
-        if (sel) {
-            extMetodoActual = sel.value;
-        }
-    }
     return extMetodoActual;
 }
 
@@ -1422,8 +1393,6 @@ async function extReiniciar() {
     try {
         await llamarApi('/api/externo/reiniciar');
         extMetodoActual = null;
-        extEsDinamica = false;
-        document.getElementById('extSelectorMetodo').hidden = true;
         await extRecargarEstado();
         document.getElementById('extZonaOperaciones').hidden = true;
         document.getElementById('extListaPasos').innerHTML = '';
@@ -1510,14 +1479,6 @@ async function extCargarArchivo(evento) {
             + '&claves=' + encodeURIComponent(claves.join(','));
         const resultado = await llamarApi(ruta);
         extMetodoActual = datos.metodo;
-        const esDin = (metodo === 'LINEAL' || metodo === 'BINARIA');
-        extEsDinamica = esDin;
-        document.getElementById('extSelectorMetodo').hidden = !esDin;
-        const radioMetodo = document.querySelector(
-            'input[name="extMetodoDinamico"][value="' + metodo + '"]');
-        if (radioMetodo) {
-            radioMetodo.checked = true;
-        }
         const radioTipo = document.querySelector(
             'input[name="extTipo"][value="' + tipo + '"]');
         if (radioTipo) {
@@ -1643,14 +1604,10 @@ function extCrearCubeta(cubeta) {
 document.querySelectorAll('[data-externo]').forEach((boton) => {
     boton.addEventListener('click', () => extAbrirMetodo(boton.dataset.externo));
 });
-document.getElementById('btnVerExternasDinamicas').addEventListener('click', extAbrirDinamicas);
-document.querySelectorAll('input[name="extMetodoDinamico"]').forEach((radio) => {
-    radio.addEventListener('change', () => {
-        if (radio.checked) {
-            extMetodoActual = radio.value;
-        }
-    });
-});
+document.getElementById('btnVerDinaLineal').addEventListener('click', () =>
+    extAbrirDinamicas('LINEAL'));
+document.getElementById('btnVerDinaBinaria').addEventListener('click', () =>
+    extAbrirDinamicas('BINARIA'));
 document.getElementById('extBtnIniciar').addEventListener('click', extAplicar);
 document.getElementById('extBtnInsertar').addEventListener('click', () => extOperar('insertar'));
 document.getElementById('extBtnBuscar').addEventListener('click', () => extOperar('buscar'));

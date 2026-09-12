@@ -47,7 +47,7 @@
                 </button>
                 <div class="nav-menu" role="menu">
                     <button class="nav-opcion" id="navOpExternasDinamicas">
-                        Búsquedas externas dinámicas</button>
+                        Dinámicas</button>
                 </div>
             </div>
         </nav>
@@ -55,12 +55,6 @@
 </header>
 
 <main class="contenido">
-
-    <!-- ============ MIGAS DE PAN (NAVEGACIÓN) ============ -->
-    <nav class="migas" id="barraMigas">
-        <button id="btnMigaInicio" class="miga">Inicio</button>
-        <span id="migaRuta"></span>
-    </nav>
 
     <!-- ============ VISTA: INICIO (2 BOTONES) ============ -->
     <section class="vista-menu vista" id="vista-inicio">
@@ -202,7 +196,8 @@
     <section class="vista-menu vista" id="vista-externas" hidden>
         <h2>Búsquedas externas</h2>
         <div class="grid-principal">
-            <button class="boton-grande" id="btnVerExternasDinamicas">Búsquedas externas dinámicas</button>
+            <button class="boton-grande" id="btnVerDinaLineal">Lineal</button>
+            <button class="boton-grande" id="btnVerDinaBinaria">Binaria</button>
         </div>
         <button class="btn-volver" data-volver="vista-algoritmos">← Volver</button>
     </section>
@@ -211,20 +206,6 @@
     <section class="tarjeta vista" id="vista-externometodo" hidden>
         <h2 id="extTituloMetodo"></h2>
         <p class="ayuda" id="extAyudaMetodo"></p>
-
-        <div class="fila funcion" id="extSelectorMetodo" hidden>
-            <fieldset>
-                <legend>Método de búsqueda</legend>
-                <label class="radio">
-                    <input type="radio" name="extMetodoDinamico" value="LINEAL" checked>
-                    Búsqueda externa lineal
-                </label>
-                <label class="radio">
-                    <input type="radio" name="extMetodoDinamico" value="BINARIA">
-                    Búsqueda externa binaria
-                </label>
-            </fieldset>
-        </div>
 
         <div class="fila funcion">
             <fieldset>
