@@ -1,85 +1,37 @@
 package Model.busquedas.externas;
 
-import java.util.ArrayList;
-import java.util.List;
-
-import Model.busquedas.PasoBusqueda;
-import Model.busquedas.ResultadoBusqueda;
-import Model.estructuras.externas.EstructuraCubetas;
+import Model.transformaciones.FuncionHash;
+import Model.transformaciones.FuncionHashModulo;
 
 /**
  * ============================================================================
- * BÚSQUEDA EXTERNA HASH MOD (DIRECTA SOBRE LA CUBETA)
+ * BÚSQUEDA EXTERNA POR TRANSFORMACIÓN DE CLAVES - HASH MOD
  * ============================================================================
  *
- * La búsqueda "natural" de la estructura externa: se calcula la cubeta con
- * el hash mod tradicional (|clave % numCubetas|) y se accede DIRECTAMENTE a
- * esa cubeta. Las claves que colisionaron y quedaron enlazadas en esa
- * misma cubeta se revisan una a una.
+ * Busca la clave transformándola con la función MÓDULO y accediendo directo
+ * a la cubeta resultante (base 0). Es la búsqueda "natural" de la estructura
+ * externa, que por defecto ubica sus claves con el hash mod tradicional
+ * (|clave % númeroDeCubetas|).
  *
- * Es la más eficiente: en un solo salto ubica la cubeta candidata y solo
- * recorre sus enlazadas.
+ * RESPONSABILIDAD ÚNICA: aportar la función hash módulo a la maquinaria
+ * común de {@link BusquedaExternaTransformacion}.
  */
-public class BusquedaExternaHashMod {
+public class BusquedaExternaHashMod extends BusquedaExternaTransformacion {
 
     /** Nombre con el que se identifica la estrategia. */
     public static final String NOMBRE = "HASH MOD";
 
-    /**
-     * Ejecuta la búsqueda directa por hash mod sobre las cubetas.
-     *
-     * @param estructura estructura externa de cubetas.
-     * @param claveBuscada valor solicitado.
-     * @return resultado con pasos y desenlace.
-     */
-    public ResultadoBusqueda buscar(EstructuraCubetas estructura, int claveBuscada) {
-        if (estructura.getCantidad() == 0) {
-            return ResultadoBusqueda.fallida(claveBuscada,
-                    "No se puede buscar " + claveBuscada
-                            + ": la estructura externa está vacía.",
-                    new ArrayList<>());
-        }
+    /** Función de transformación usada por esta búsqueda. */
+    private final FuncionHash funcion = new FuncionHashModulo();
 
-        List<PasoBusqueda> pasos = new ArrayList<>();
-        int numeroPaso = 0;
-        int totalCubetas = estructura.getNumeroCubetas();
-        int cubeta = Math.abs(claveBuscada % totalCubetas);
-
-        numeroPaso++;
-        pasos.add(new PasoBusqueda(numeroPaso, cubeta, 0, totalCubetas - 1,
-                claveBuscada, "HASH MOD tradicional: cubeta = |" + claveBuscada
-                        + " % " + totalCubetas + "| = " + cubeta + ". Se accede "
-                        + "directamente a la cubeta " + cubeta + "."));
-
-        int[] datos = estructura.consultarCubeta(cubeta).getDatos();
-        if (datos.length == 0) {
-            return ResultadoBusqueda.fallida(claveBuscada,
-                    "La clave " + claveBuscada + " NO existe: su cubeta " + cubeta
-                            + " está vacía.",
-                    pasos);
-        }
-
-        for (int dato : datos) {
-            numeroPaso++;
-            if (dato == claveBuscada) {
-                pasos.add(new PasoBusqueda(numeroPaso, cubeta, 0, totalCubetas - 1,
-                        dato, "¡Coincidencia! La cubeta " + cubeta
-                                + " (enlazada) contiene " + dato
-                                + ", igual a la buscada."));
-                return ResultadoBusqueda.exitosa(claveBuscada, cubeta, pasos);
-            }
-            pasos.add(new PasoBusqueda(numeroPaso, cubeta, 0, totalCubetas - 1,
-                    dato, "La cubeta " + cubeta + " contiene (enlazada) la clave "
-                            + dato + " y NO es la buscada."));
-        }
-
-        return ResultadoBusqueda.fallida(claveBuscada,
-                "La clave " + claveBuscada + " NO existe: se revisaron todas las "
-                        + "claves enlazadas de la cubeta " + cubeta + " sin hallarla.",
-                pasos);
+    /** @return la función hash módulo. */
+    @Override
+    public FuncionHash getFuncionHash() {
+        return funcion;
     }
 
     /** @return nombre único ("HASH MOD"). */
+    @Override
     public String getNombre() {
         return NOMBRE;
     }

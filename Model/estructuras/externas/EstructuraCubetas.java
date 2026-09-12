@@ -9,6 +9,8 @@ import Model.excepciones.ClaveDuplicadaException;
 import Model.excepciones.ClaveInvalidaException;
 import Model.excepciones.ClaveNoEncontradaException;
 import Model.excepciones.ExcepcionEstructura;
+import Model.transformaciones.FuncionHash;
+import Model.transformaciones.FuncionHashModulo;
 
 /**
  * ============================================================================
@@ -20,14 +22,21 @@ import Model.excepciones.ExcepcionEstructura;
  * según la carga, como si cada cubeta fuera una página de memoria
  * secundaria cargada bajo demanda.
  *
- * REGLA DEL PROYECTO (EXTERNA): el usuario SOLO decide la cantidad de
- * dígitos de la clave. La DIRECCIÓN siempre se calcula con el HASH MOD
+ * REGLA DEL PROYECTO (EXTERNA): la estructura PUEDE ubicar cada clave con
+ * cualquiera de las funciones de transformación. Por DEFECTO (y para las
+ * búsquedas LINEAL/BINARIA) la DIRECCIÓN se calcula con el HASH MOD
  * tradicional sin el +1 del cierre interno:
  *
  *      cubeta = | clave % numeroDeCubetas |
  *
  * (base 0, para que la cubeta 0 sea la primera; se toma valor absoluto por
- * si acaso el operador módulo de Java devolviera un negativo).
+ * si acaso el operador módulo de Java devolviera un negativo). Cuando el
+ * usuario elige la sección "Transformación de claves" se activa OTRA función
+ * (CUADRADO, TRUNCAMIENTO o PLEGAMIENTO): la cubeta de cada clave se calcula
+ * con esa función, tomando la dirección 1-based que devuelve y restándole 1
+ * para volver al índice base 0 de las cubetas. La estructura conserva así
+ * TODAS sus características propias (cubetas de 1 espacio + enlazadas,
+ * crecimiento dinámico, filas y reducción) sin importar la función vigente.
  *
  * CRECIMIENTO DINÁMICO:
  *   - Si una cubeta se LLENA al insertar, primero se hace una EXPANSIÓN
@@ -54,6 +63,13 @@ public class EstructuraCubetas {
 
     /** Cubetas de la estructura (cada una es una "página"). */
     private Cubeta[] cubetas;
+
+    /**
+     * Función hash vigente con la que se calcula la cubeta de cada clave.
+     * Por defecto es el HASH MOD tradicional; la búsqueda por transformación
+     * de claves puede cambiarla (CUADRADO, TRUNCAMIENTO o PLEGAMIENTO).
+     */
+    private FuncionHash funcion = new FuncionHashModulo();
 
     /** Cantidad total de claves almacenadas (incluye las enlazadas). */
     private int cantidadRegistros;
@@ -172,21 +188,36 @@ public class EstructuraCubetas {
     }
 
     // ========================================================================
-    // HASH MOD TRADICIONAL (SIN +1, BASE 0)
+    // POSICIÓN DE LA CLAVE (FUNCIÓN DE TRANSFORMACIÓN VIGENTE)
     // ========================================================================
 
     /**
-     * Calcula la cubeta destino mediante el hash mod tradicional (base 0).
+     * Calcula la cubeta destino con la FUNCIÓN de transformación vigente:
+     * la dirección 1-based que devuelve la función se convierte al índice
+     * base 0 de las cubetas (dirección - 1). Con el HASH MOD por defecto el
+     * resultado coincide con el tradicional |clave % cubetas| de la regla
+     * externa (por eso se tomaba valor absoluto en las anotaciones: los
+     * operandos son claves válidas no negativas).
      *
      * @param dato valor a transformar.
      * @return índice base 0 de la cubeta.
      */
     private int obtenerPosicion(int dato) {
-        int posicion = dato % cubetas.length;
-        if (posicion < 0) {
-            posicion = posicion * -1;
-        }
-        return posicion;
+        return posicionCon(dato, cubetas.length);
+    }
+
+    /**
+     * Calcula la cubeta base 0 que le corresponde a un dato con un total de
+     * cubetas dado, usando la función de transformación vigente. Es la forma
+     * correcta de simular un rehash (al crecer/encoger el número de cubetas)
+     * porque la función depende del total actual.
+     *
+     * @param dato         valor a transformar.
+     * @param totalCubetas número de cubetas vigente.
+     * @return índice base 0 de la cubeta.
+     */
+    private int posicionCon(int dato, int totalCubetas) {
+        return funcion.calcularDireccion(dato, totalCubetas) - 1;
     }
 
     // ========================================================================
@@ -353,8 +384,7 @@ public class EstructuraCubetas {
                     Set<Integer> ocupadasSimuladas = new HashSet<>();
                     for (int i = 0; i < cubetas.length; i++) {
                         for (int clave : cubetas[i].getDatos()) {
-                            int pos = Math.abs(clave % nuevaCantidad);
-                            ocupadasSimuladas.add(pos);
+                            ocupadasSimuladas.add(posicionCon(clave, nuevaCantidad));
                         }
                     }
                     double densidadOcupadas
@@ -472,6 +502,46 @@ public class EstructuraCubetas {
             }
         }
         return obtenerPosicion(clave);
+    }
+
+    /**
+     * @return cubeta base 0 en la que la clave VIVE o viviría según la
+     *         función de transformación vigente (para reportes de la vista).
+     */
+    public int posicionDe(int clave) {
+        return obtenerPosicion(clave);
+    }
+
+    /**
+     * Cambia la función de transformación con la que se ubican las claves:
+     * se REDISTRIBUYE el contenido completo con la nueva función (mismo
+     * número de cubetas), de modo que una búsqueda por transformación nunca
+     * quede desincronizada con lo almacenado. La estructura conserva sus
+     * características externas (filas, tipo TOTAL/PARCIAL, cubetas de 1
+     * espacio con enlazadas).
+     *
+     * @param nueva función hash a aplicar (si es null se deja la vigente).
+     */
+    public void configurarFuncion(FuncionHash nueva) {
+        if (nueva == null || nueva == funcion) {
+            return;
+        }
+        this.funcion = nueva;
+        if (cantidadRegistros == 0) {
+            return;
+        }
+        int[] registros = obtenerClavesPlanas();
+        cantidadRegistros = 0;
+        crearCubetas(cubetas.length);
+        for (int r : registros) {
+            cubetas[obtenerPosicion(r)].insertar(r);
+            cantidadRegistros++;
+        }
+    }
+
+    /** @return nombre de la función de transformación vigente. */
+    public String getNombreFuncion() {
+        return funcion.getNombre();
     }
 
     /** @return dígitos configurables de las claves. */

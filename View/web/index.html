@@ -70,7 +70,7 @@
         <div class="grid-principal">
             <button class="boton-grande" id="btnVerInternas">Búsquedas internas</button>
             <button class="boton-grande" id="btnVerExternas">Búsquedas externas</button>
-            <button class="boton-grande mudo" id="btnVerIndices">Índices</button>
+            <button class="boton-grande" id="btnVerIndices">Índices</button>
         </div>
         <button class="btn-volver" data-volver="vista-inicio">← Volver</button>
     </section>
@@ -198,6 +198,19 @@
         <div class="grid-principal">
             <button class="boton-grande" id="btnVerDinaLineal">Lineal</button>
             <button class="boton-grande" id="btnVerDinaBinaria">Binaria</button>
+            <button class="boton-grande" id="btnVerDinaTransformacion">
+                Transformación de claves</button>
+        </div>
+        <button class="btn-volver" data-volver="vista-algoritmos">← Volver</button>
+    </section>
+
+    <!-- ============ VISTA: ÍNDICES ============ -->
+    <section class="vista-menu vista" id="vista-indices" hidden>
+        <h2>Índices</h2>
+        <div class="grid-principal">
+            <button class="boton-grande" id="btnVerIndicesPrimarios">Índices primarios</button>
+            <button class="boton-grande" id="btnVerIndicesSecundarios">Índices secundarios</button>
+            <button class="boton-grande" id="btnVerIndicesMultinivel">Índices multinivel</button>
         </div>
         <button class="btn-volver" data-volver="vista-algoritmos">← Volver</button>
     </section>
@@ -221,6 +234,28 @@
             </fieldset>
         </div>
 
+        <div class="fila funcion" id="extFilaFuncion" hidden>
+            <fieldset>
+                <legend>Función hash para la transformación de claves (no cambia una vez aplicada)</legend>
+                <label class="radio">
+                    <input type="radio" name="extFuncionHash" value="HASH MOD" checked>
+                    Función hash lineal: cubeta = clave mod nº de cubetas
+                </label>
+                <label class="radio">
+                    <input type="radio" name="extFuncionHash" value="HASH CUADRADO">
+                    Función hash cuadrado
+                </label>
+                <label class="radio">
+                    <input type="radio" name="extFuncionHash" value="HASH TRUNCAMIENTO">
+                    Función hash truncamiento
+                </label>
+                <label class="radio">
+                    <input type="radio" name="extFuncionHash" value="HASH PLEGAMIENTO">
+                    Función hash plegamiento
+                </label>
+            </fieldset>
+        </div>
+
         <div class="fila">
             <label>
                 Cantidad de cifras de la clave (1-7)
@@ -235,7 +270,9 @@
                 <input type="number" id="extFilas" min="1" max="16" value="1">
             </label>
             <span class="nota-externo">
-                Posición de la clave: hash mod comun
+                Cada cubeta tiene 1 espacio y las colisiones se ENLAZAN. La
+                posición de cada clave la decide la función hash vigente
+                (hash mod por defecto; la de transformación si se elige aquí).
             </span>
         </div>
 

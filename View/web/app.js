@@ -1032,8 +1032,22 @@ document.getElementById('btnVerExternas').addEventListener('click', () => {
         ['Algoritmos de búsqueda', 'Búsquedas externas']);
 });
 document.getElementById('btnVerIndices').addEventListener('click', () => {
-    abrirPlaceholder('Índices',
-        'La sección de Índices aún no está implementada. '
+    navegarA('vista-indices',
+        ['Algoritmos de búsqueda', 'Índices']);
+});
+document.getElementById('btnVerIndicesPrimarios').addEventListener('click', () => {
+    abrirPlaceholder('Índices primarios',
+        'La sección de Índices primarios aún no está implementada. '
+        + 'Estará disponible en una próxima versión.');
+});
+document.getElementById('btnVerIndicesSecundarios').addEventListener('click', () => {
+    abrirPlaceholder('Índices secundarios',
+        'La sección de Índices secundarios aún no está implementada. '
+        + 'Estará disponible en una próxima versión.');
+});
+document.getElementById('btnVerIndicesMultinivel').addEventListener('click', () => {
+    abrirPlaceholder('Índices multinivel',
+        'La sección de Índices multinivel aún no está implementada. '
         + 'Estará disponible en una próxima versión.');
 });
 document.getElementById('btnVerTransformacion').addEventListener('click', () => {
@@ -1086,6 +1100,14 @@ let extEstado = { seleccionHecha: false, estructura: {} };
 /** Método de búsqueda externa de la hoja abierta. */
 let extMetodoActual = null;
 
+/**
+ * true cuando la hoja externa abierta es la "Transformación de claves": ahí
+ * el método real lo decide la función hash elegida (HASH MOD, HASH CUADRADO,
+ * HASH TRUNCAMIENTO o HASH PLEGAMIENTO), que también fija DÓNDE se ubica cada
+ * clave en las cubetas.
+ */
+let extEsTransformacion = false;
+
 /** true mientras una animación externa está en curso. */
 let extAnimando = false;
 
@@ -1100,6 +1122,8 @@ async function extRecargarEstado() {
 /** Muestra el método externo en la hoja y navega a su configuración. */
 function extAbrirMetodo(nombre) {
     extMetodoActual = nombre;
+    extEsTransformacion = false;
+    document.getElementById('extFilaFuncion').hidden = true;
     const migas = ['Algoritmos de búsqueda', 'Búsquedas externas', nombre];
 
     document.getElementById('extTituloMetodo').textContent = nombre;
@@ -1124,6 +1148,8 @@ function extAbrirMetodo(nombre) {
  */
 function extAbrirDinamicas(metodo) {
     extMetodoActual = metodo || 'LINEAL';
+    extEsTransformacion = false;
+    document.getElementById('extFilaFuncion').hidden = true;
     document.getElementById('extTituloMetodo').textContent = 'Búsquedas externas dinámicas';
     document.getElementById('extAyudaMetodo').textContent =
         'Elija el tipo de estructura dinámica '
@@ -1142,8 +1168,70 @@ function extAbrirDinamicas(metodo) {
         ['Algoritmos de búsqueda', 'Búsquedas externas', 'Búsquedas externas dinámicas']);
 }
 
+/** Habilita el selector de función hash externo (al abrir la hoja se vuelve a preguntar). */
+function extHabilitarFuncion() {
+    document.querySelectorAll('input[name="extFuncionHash"]').forEach((radio) => {
+        radio.disabled = false;
+    });
+}
+
+/** Bloquea el selector de función hash externo (regla: inmodificable una vez aplicada). */
+function extDeshabilitarFuncion() {
+    document.querySelectorAll('input[name="extFuncionHash"]').forEach((radio) => {
+        radio.disabled = true;
+    });
+}
+
+/**
+ * Abre la hoja "Búsqueda por transformación de claves" de las EXTERNAS: el
+ * método real lo fija la función hash marcada (HASH MOD, HASH CUADRADO, HASH
+ * TRUNCAMIENTO o HASH PLEGAMIENTO), que también decide en qué CUBETA vive
+ * cada clave. La estructura conserva sus características externas.
+ */
+function extAbrirTransformacion() {
+    extMetodoActual = 'TRANSFORMACION EXTERNA';
+    extEsTransformacion = true;
+    extHabilitarFuncion();
+    document.getElementById('extFilaFuncion').hidden = false;
+    document.getElementById('extTituloMetodo').textContent =
+        'Búsqueda externa por transformación de claves';
+    document.getElementById('extAyudaMetodo').textContent =
+        'La función hash elegida define el método de búsqueda y decide '
+        + 'DÓNDE se ubica cada clave en las cubetas (la estructura conserva '
+        + 'su crecimiento dinámico, un espacio por cubeta y claves enlazadas). '
+        + 'No puede cambiarse una vez aplicada la configuración.';
+    document.getElementById('extZonaOperaciones').hidden = true;
+    document.getElementById('extArchivoInput').value = '';
+    document.getElementById('extListaPasos').innerHTML = '';
+    document.getElementById('extMensaje').textContent =
+        'Aplique la configuración para comenzar a operar.';
+    document.getElementById('extMensaje').classList.remove('error', 'exito');
+    document.getElementById('extEstadoEstructura').textContent = '';
+    document.getElementById('extVisualCubetas').innerHTML = '';
+    document.getElementById('extEstadoAnimacion').textContent = '';
+
+    if (extEstado.seleccionHecha
+            && ['HASH MOD', 'HASH CUADRADO', 'HASH TRUNCAMIENTO',
+                'HASH PLEGAMIENTO'].includes(extEstado.metodo)) {
+        const coincidente = document.querySelector(
+            'input[name="extFuncionHash"][value="' + extEstado.funcion + '"]');
+        if (coincidente) {
+            coincidente.checked = true;
+        }
+    }
+
+    navegarA('vista-externometodo',
+        ['Algoritmos de búsqueda', 'Búsquedas externas',
+            'Transformación de claves']);
+}
+
 /** Devuelve el método de búsqueda externo activo. */
 function extMetodoActivo() {
+    if (extEsTransformacion) {
+        const marcada = document.querySelector(
+            'input[name="extFuncionHash"]:checked');
+        return marcada ? marcada.value : null;
+    }
     return extMetodoActual;
 }
 
@@ -1183,6 +1271,9 @@ async function extAplicar() {
             extMostrarMensaje(seleccionado.mensaje, true);
             return;
         }
+        if (extEsTransformacion) {
+            extDeshabilitarFuncion();
+        }
         document.getElementById('extZonaOperaciones').hidden = false;
         document.getElementById('extListaPasos').innerHTML = '';
         await extRecargarEstado();
@@ -1211,6 +1302,7 @@ function extPintarAviso() {
     aviso.textContent = 'Claves de ' + estado.digitos + ' dígito(s): rango '
         + estado.rangoMinimo + '..' + estado.rangoMaximo
         + ' | Método activo: ' + estado.metodo
+        + ' | Hash: ' + (estado.funcion || 'HASH MOD')
         + ' | Estructura: ' + (estado.estructura.tipoEstructura || 'TOTAL') + '.';
     aviso.classList.remove('error', 'exito');
 }
@@ -1393,6 +1485,14 @@ async function extReiniciar() {
     try {
         await llamarApi('/api/externo/reiniciar');
         extMetodoActual = null;
+        extEsTransformacion = false;
+        extHabilitarFuncion();
+        document.getElementById('extFilaFuncion').hidden = true;
+        const modRadio = document.querySelector(
+            'input[name="extFuncionHash"][value="HASH MOD"]');
+        if (modRadio) {
+            modRadio.checked = true;
+        }
         await extRecargarEstado();
         document.getElementById('extZonaOperaciones').hidden = true;
         document.getElementById('extListaPasos').innerHTML = '';
@@ -1479,10 +1579,21 @@ async function extCargarArchivo(evento) {
             + '&claves=' + encodeURIComponent(claves.join(','));
         const resultado = await llamarApi(ruta);
         extMetodoActual = datos.metodo;
+        extEsTransformacion = false;
+        extHabilitarFuncion();
+        document.getElementById('extFilaFuncion').hidden = true;
         const radioTipo = document.querySelector(
             'input[name="extTipo"][value="' + tipo + '"]');
         if (radioTipo) {
             radioTipo.checked = true;
+        }
+        if (['HASH MOD', 'HASH CUADRADO', 'HASH TRUNCAMIENTO',
+            'HASH PLEGAMIENTO'].includes(metodo)) {
+            const radioFuncion = document.querySelector(
+                'input[name="extFuncionHash"][value="' + metodo + '"]');
+            if (radioFuncion) {
+                radioFuncion.checked = true;
+            }
         }
         document.getElementById('extArchivoInput').value = '';
         if (resultado.ok) {
@@ -1512,6 +1623,7 @@ function extDibujar() {
         return;
     }
     estadoVisual.textContent = 'Estructura: ' + (est.tipoEstructura || 'TOTAL')
+        + ' | Hash: ' + (extEstado.funcion || 'HASH MOD')
         + ' | Cubetas: ' + est.numCubetas
         + ' (' + est.cubetasPorFila + ' por fila x ' + est.filas + ' fila(s))'
         + ' | Claves: ' + est.cantidad
@@ -1608,6 +1720,8 @@ document.getElementById('btnVerDinaLineal').addEventListener('click', () =>
     extAbrirDinamicas('LINEAL'));
 document.getElementById('btnVerDinaBinaria').addEventListener('click', () =>
     extAbrirDinamicas('BINARIA'));
+document.getElementById('btnVerDinaTransformacion').addEventListener('click',
+    () => extAbrirTransformacion());
 document.getElementById('extBtnIniciar').addEventListener('click', extAplicar);
 document.getElementById('extBtnInsertar').addEventListener('click', () => extOperar('insertar'));
 document.getElementById('extBtnBuscar').addEventListener('click', () => extOperar('buscar'));

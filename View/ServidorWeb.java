@@ -693,6 +693,8 @@ public class ServidorWeb {
         json.append("\"seleccionHecha\":").append(externo.isSeleccionHecha());
         json.append(",\"metodo\":")
                 .append(SerializadorJson.cadena(externo.getMetodoActivo()));
+        json.append(",\"funcion\":")
+                .append(SerializadorJson.cadena(externo.getNombreFuncionActiva()));
         json.append(",\"digitos\":").append(externo.getDigitosClave());
         json.append(",\"rangoMinimo\":").append(
                 externo.getEstructura().getValorMinimo());
@@ -706,6 +708,16 @@ public class ServidorWeb {
                 json.append(',');
             }
             json.append(SerializadorJson.cadena(nombres.get(i)));
+        }
+        json.append("]");
+
+        json.append(",\"funciones\":[");
+        List<String> funciones = externo.getNombresFunciones();
+        for (int i = 0; i < funciones.size(); i++) {
+            if (i > 0) {
+                json.append(',');
+            }
+            json.append(SerializadorJson.cadena(funciones.get(i)));
         }
         json.append("]");
 
@@ -821,7 +833,10 @@ public class ServidorWeb {
         try {
             String metodo = textoObligatorio(parametros, "metodo");
             externo.seleccionar(metodo);
-            return okJson("Búsqueda externa activa: " + metodo + ".");
+            String mensaje = "Búsqueda externa activa: " + metodo
+                    + " (las claves se ubican con "
+                    + externo.getNombreFuncionActiva() + ").";
+            return okJson(mensaje);
         } catch (IllegalArgumentException e) {
             return errorJson(e.getMessage());
         }

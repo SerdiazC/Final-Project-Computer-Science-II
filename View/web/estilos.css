@@ -229,6 +229,41 @@ body {
     max-width: 640px;
 }
 
+/* ---------- Contenido de las hojas de BÚSQUEDAS INTERNAS Y EXTERNAS un poco más grande ---------- */
+:is(#vista-metodo, #vista-externometodo, #vista-arboldigital, #vista-residuoletras,
+    #vista-residuomultiples, #vista-huffman) h2 {
+    font-size: 1.52rem;
+}
+
+:is(#vista-metodo, #vista-externometodo, #vista-arboldigital, #vista-residuoletras,
+    #vista-residuomultiples, #vista-huffman) .ayuda {
+    font-size: 1.14rem;
+}
+
+:is(#vista-metodo, #vista-externometodo, #vista-arboldigital, #vista-residuoletras,
+    #vista-residuomultiples, #vista-huffman) label {
+    font-size: 1.22rem;
+}
+
+:is(#vista-metodo, #vista-externometodo, #vista-arboldigital, #vista-residuoletras,
+    #vista-residuomultiples, #vista-huffman) legend {
+    font-size: 1.18rem;
+}
+
+:is(#vista-metodo, #vista-externometodo, #vista-arboldigital, #vista-residuoletras,
+    #vista-residuomultiples, #vista-huffman) input[type="number"],
+:is(#vista-metodo, #vista-externometodo, #vista-arboldigital, #vista-residuoletras,
+    #vista-residuomultiples, #vista-huffman) input[type="text"],
+:is(#vista-metodo, #vista-externometodo, #vista-arboldigital, #vista-residuoletras,
+    #vista-residuomultiples, #vista-huffman) select {
+    font-size: 1.22rem;
+}
+
+:is(#vista-metodo, #vista-externometodo, #vista-arboldigital, #vista-residuoletras,
+    #vista-residuomultiples, #vista-huffman) button {
+    font-size: 1.22rem;
+}
+
 /* ---------- Vistas de MENÚ (sin tarjeta blanca, ocupan toda la pantalla) ---------- */
 .vista-menu {
     flex: 1 1 auto;
@@ -1615,6 +1650,14 @@ button.mudo:hover {
     background: #e0f3f2;
     box-shadow: var(--sombra);
     transform: translateY(-1px);
+}
+
+/* Los botones de los menús de búsquedas/índices con texto un poco más grande. */
+#vista-internas .boton-grande,
+#vista-externas .boton-grande,
+#vista-indices .boton-grande {
+    font-size: 1.34rem;
+    min-height: 112px;
 }
 
 /* Las vistas ocultas por el atributo [hidden] nunca deben mostrarse. */
