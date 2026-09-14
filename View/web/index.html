@@ -584,7 +584,107 @@
 
         <button class="btn-volver" data-volver="vista-internas">← Volver</button>
     </section>
+    <!-- ============ VISTA: ÍNDICES SOBRE ARCHIVO INDEXADO (HOJA) ============ -->
+    <section class="tarjeta vista" id="vista-indicesmetodo" hidden>
+        <h2 id="indTituloMetodo">Índices primarios, secundarios y multinivel</h2>
+        <p class="ayuda" id="indAyudaMetodo">
+            Las claves se guardan en un archivo de cubetas ordenadas por la
+            función hash (cubeta = clave mod nº de cubetas). Sobre ese archivo
+            se construyen automáticamente tres índices que aceleran la
+            búsqueda: el primario (una entrada por cubeta ocupada), el
+            secundario (una entrada por clave con su posición exacta) y el
+            multinivel (resumen del primario). Configure el archivo y opere
+            sobre él.
+        </p>
 
+        <div class="fila">
+            <label>
+                Cantidad de cifras de la clave (1-7)
+                <input type="number" id="indDigitos" min="1" max="7" value="4">
+            </label>
+            <label>
+                Número de cubetas (1-200)
+                <input type="number" id="indCubetas" min="1" max="200" value="6">
+            </label>
+            <label>
+                Capacidad de cada cubeta (1-20)
+                <input type="number" id="indCapacidad" min="1" max="20" value="2">
+            </label>
+            <span class="nota-externo">
+                La posición de cada clave la decide el hash (clave mod N de
+                cubetas). Si una cubeta se llena se expande su capacidad y, al
+                superar el 75 % de ocupación global, el número de cubetas se
+                duplica y se recalculan todas las posiciones.
+            </span>
+        </div>
+
+        <div class="aviso" id="indAvisoRango"></div>
+
+        <button id="indBtnIniciar" class="principal">Aplicar configuración y operar</button>
+
+        <div id="indZonaOperaciones" hidden>
+            <h3>Operaciones sobre el archivo indexado</h3>
+            <div class="fila">
+                <label>
+                    Clave
+                    <input type="number" id="indClave">
+                </label>
+                <button id="indBtnInsertar">Insertar</button>
+                <button id="indBtnEliminar" class="peligro">Eliminar</button>
+                <button id="indBtnReiniciar" class="peligro">Limpiar y empezar de cero</button>
+            </div>
+            <div id="indMensaje" class="aviso"></div>
+
+            <div class="fila">
+                <button id="indBtnBuscarPrimario" class="principal">Buscar (índice primario)</button>
+                <button id="indBtnBuscarSecundario" class="principal">Buscar (índice secundario)</button>
+                <button id="indBtnBuscarMultinivel" class="principal">Buscar (índice multinivel)</button>
+            </div>
+
+            <div class="arbol-cabecera">
+                <div class="arbol-panel">
+                    <h3>Archivo de datos (cubetas)</h3>
+                    <div id="indEstadoEstructura" class="aviso"></div>
+                    <div id="indEstadoAnimacion" class="estado-animacion"></div>
+                    <div id="indVisualCubetas" class="visual"></div>
+                </div>
+                <div class="arbol-panel columna-proceso">
+                    <h3>Proceso de la operación</h3>
+                    <div id="indListaPasos" class="lista-pasos"></div>
+                </div>
+            </div>
+
+            <div class="ind-tablas">
+                <div class="arbol-panel ind-tabla-card">
+                    <h3>Índice primario <span class="ind-tabla-leyenda">clave → cubeta</span></h3>
+                    <p class="ind-tabla-ayuda">
+                        Una entrada por cada cubeta ocupada: la PRIMERA clave
+                        de la cubeta y a qué cubeta apunta.
+                    </p>
+                    <div id="indTablaPrimario" class="ind-tabla"></div>
+                </div>
+                <div class="arbol-panel ind-tabla-card">
+                    <h3>Índice secundario <span class="ind-tabla-leyenda">clave → cubeta + posición</span></h3>
+                    <p class="ind-tabla-ayuda">
+                        Una entrada por CADA clave del archivo: indica la cubeta
+                        y la posición exacta donde vive dentro de ella.
+                    </p>
+                    <div id="indTablaSecundario" class="ind-tabla"></div>
+                </div>
+                <div class="arbol-panel ind-tabla-card">
+                    <h3>Índice multinivel <span class="ind-tabla-leyenda">clave → entrada primaria</span></h3>
+                    <p class="ind-tabla-ayuda">
+                        Nivel superior que resume el índice primario: toma una
+                        entrada de cada dos y apunta a la posición del índice
+                        primario que debe consultarse.
+                    </p>
+                    <div id="indTablaMultinivel" class="ind-tabla"></div>
+                </div>
+            </div>
+        </div>
+
+        <button class="btn-volver" data-volver="vista-indices">← Volver</button>
+    </section>
     <!-- ============ VISTA: PLACEHOLDER (SIN FUNCIONALIDAD) ============ -->
     <section class="tarjeta vista" id="vista-placeholder" hidden>
         <h2 id="tituloPlaceholder"></h2>

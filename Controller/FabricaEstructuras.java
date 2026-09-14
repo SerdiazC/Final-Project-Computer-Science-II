@@ -6,6 +6,7 @@ import Model.estructuras.EstructuraArbolDigital;
 import Model.estructuras.EstructuraHash;
 import Model.estructuras.EstructuraOrdenada;
 import Model.estructuras.EstructuraSecuencial;
+import Model.estructuras_dinámicas.DynamicStruct;
 import Model.excepciones.ExcepcionEstructura;
 import Model.transformaciones.FuncionHash;
 
@@ -37,7 +38,9 @@ public final class FabricaEstructuras {
         /** Transformación de claves con función PLEGAMIENTO. */
         HASH_PLEGAMIENTO,
         /** Árbol digital guiado por los bits de la clave (residuos digital). */
-        RESIDUOS_DIGITAL
+        RESIDUOS_DIGITAL,
+        /** Estructura dinámica basada en cubetas e índices primarios/secundarios/multinivel. */
+        DINAMICA_INDICES
     }
 
     /**
@@ -93,6 +96,9 @@ public final class FabricaEstructuras {
                 // claves; sus puntos ocupados se resuelven con su regla nativa
                 // (avanzar al siguiente bit), no con soluciones hash.
                 return new EstructuraArbolDigital(digitosClave);
+            case DINAMICA_INDICES:
+                // Estructura dinámica e índices (inicializada por defecto con 4 cubetas y capacidad de 3 c/u)
+                return new DynamicStruct(4, 3);
             default:
                 throw new IllegalArgumentException(
                         "Tipo de estructura no soportado: " + tipo);
@@ -125,6 +131,8 @@ public final class FabricaEstructuras {
                 return TipoEstructura.HASH_PLEGAMIENTO;
             case EstructuraDeDatos.TIPO_RESIDUOS_DIGITAL:
                 return TipoEstructura.RESIDUOS_DIGITAL;
+            case "DINAMICA": // O la constante técnica que maneje tu DynamicStruct
+                return TipoEstructura.DINAMICA_INDICES;
             default:
                 throw new IllegalArgumentException(
                         "Tipo de estructura desconocido: " + tipoTecnico);

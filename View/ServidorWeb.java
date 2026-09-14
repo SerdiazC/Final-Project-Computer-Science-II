@@ -9,6 +9,7 @@ import Controller.GestorArbolResiduosLetras;
 import Controller.GestorArbolResiduosMultiples;
 import Controller.GestorBusquedas;
 import Controller.GestorBusquedasExternas;
+import Controller.GestorEstructurasDinamicas;
 import Model.EstructuraDeDatos;
 import Model.busquedas.PasoBusqueda;
 import Model.busquedas.ResultadoBusqueda;
@@ -28,6 +29,11 @@ import Model.estructuras.PasoBusquedaLetras;
 import Model.estructuras.PasoBusquedaMultiples;
 import Model.estructuras.PasoHuffman;
 import Model.estructuras.PasoInsercion;
+import Model.estructuras_dinámicas.Bucket;
+import Model.estructuras_dinámicas.DynamicStruct;
+import Model.estructuras_dinámicas.Index;
+import Model.estructuras_dinámicas.MultiLevelIndex;
+import Model.estructuras_dinámicas.SecondaryIndex;
 import Model.excepciones.ExcepcionEstructura;
 import Model.transformaciones.FuncionHash;
 
@@ -75,6 +81,14 @@ import java.util.concurrent.Executors;
  *   POST /api/exportar            -> claves + configuración vigente (JSON)
  *   POST /api/cargar              -> claves (reconstruye la estructura activa)
  *
+ *   + Sección ÍNDICES (dinámicos: primarios, secundarios, multinivel):
+ *   GET  /api/indices/estado      -> archivo de cubetas + los 3 índices
+ *   POST /api/indices/configurar  -> digitos, cubetas, capacidad (nuevo, vacío)
+ *   POST /api/indices/insertar    -> clave
+ *   POST /api/indices/eliminar    -> clave
+ *   POST /api/indices/buscar      -> clave + tipo (primario/secundario/multinivel)
+ *   POST /api/indices/reiniciar   -> limpia y restaura la estructura por defecto
+ *
  * RESPONSABILIDAD ÚNICA: exponer el sistema por web; NO decide reglas de
  * negocio (viven en el modelo y el gestor).
  */
@@ -101,6 +115,9 @@ public class ServidorWeb {
     /** Controlador del ÁRBOL DE HUFFMAN (compresión por frecuencias). */
     private GestorArbolHuffman arbolHuffman;
 
+    /** Controlador de la estructura de ÍNDICES (dinámicos, primarios/secundarios/multinivel). */
+    private GestorEstructurasDinamicas gestorIndices;
+
     /** Puerta de entrada HTTP del JDK. */
     private HttpServer servidor;
 
@@ -124,6 +141,7 @@ public class ServidorWeb {
         this.arbolResiduos = new GestorArbolResiduosLetras();
         this.arbolResiduosMultiples = new GestorArbolResiduosMultiples();
         this.arbolHuffman = new GestorArbolHuffman();
+        this.gestorIndices = new GestorEstructurasDinamicas(6, 2);
     }
 
     /**
@@ -241,6 +259,18 @@ public class ServidorWeb {
                 responderJson(intercambio, huffmanProcesarJson(intercambio));
             } else if (ruta.equals("/api/huffman/reiniciar")) {
                 responderJson(intercambio, huffmanReiniciarJson());
+            } else if (ruta.equals("/api/indices/estado")) {
+                responderJson(intercambio, indicesEstadoJson());
+            } else if (ruta.equals("/api/indices/configurar")) {
+                responderJson(intercambio, indicesConfigurarJson(intercambio));
+            } else if (ruta.equals("/api/indices/insertar")) {
+                responderJson(intercambio, indicesInsertarJson(intercambio));
+            } else if (ruta.equals("/api/indices/eliminar")) {
+                responderJson(intercambio, indicesEliminarJson(intercambio));
+            } else if (ruta.equals("/api/indices/buscar")) {
+                responderJson(intercambio, indicesBuscarJson(intercambio));
+            } else if (ruta.equals("/api/indices/reiniciar")) {
+                responderJson(intercambio, indicesReiniciarJson());
             } else {
                 servirEstatico(intercambio, ruta);
             }
@@ -673,6 +703,256 @@ public class ServidorWeb {
                     + ",\"mensaje\":" + SerializadorJson.cadena(resultado.getMensaje())
                     + ",\"pasos\":" + pasos + '}';
         } catch (IllegalArgumentException | IllegalStateException e) {
+            return errorJson(e.getMessage());
+        }
+    }
+
+    // ========================================================================
+    // ÍNDICES (DINÁMICOS: PRIMARIOS, SECUNDARIOS, MULTINIVEL) - /api/indices/*
+    // ========================================================================
+
+    /**
+     * Estado de la sección de índices: la configuración vigente, el rango de
+     * claves y la estructura completa (cubetas + los tres índices) serializada
+     * para la vista.
+     *
+     * @return literal JSON de estado de índices.
+     */
+    private String indicesEstadoJson() {
+        DynamicStruct estructura = gestorIndices.getEstructura();
+        StringBuilder json = new StringBuilder("{");
+        json.append("\"configurado\":true");
+        json.append(",\"digitos\":").append(estructura.getDigitosClave());
+        json.append(",\"rangoMinimo\":").append(estructura.obtenerValorMinimoValido());
+        json.append(",\"rangoMaximo\":").append(estructura.obtenerValorMaximoValido());
+        json.append(",\"estructura\":").append(indicesEstructuraJson(estructura));
+        json.append('}');
+        return json.toString();
+    }
+
+    /**
+     * Serializa la estructura de índices: el archivo de cubetas con su
+     * contenido real y los tres índices derivados (primario, secundario y
+     * multinivel) listos para dibujar en tablas.
+     *
+     * @param estructura estructura dinámica vigente.
+     * @return literal JSON con cubetas e índices.
+     */
+    private String indicesEstructuraJson(DynamicStruct estructura) {
+        StringBuilder json = new StringBuilder("{");
+        json.append("\"tipo\":").append(SerializadorJson.cadena(estructura.getTipo()))
+                .append(",\"numCubetas\":").append(estructura.getNumeroCubetas())
+                .append(",\"capacidadCubeta\":").append(estructura.getCapacidadCubeta())
+                .append(",\"cantidad\":").append(estructura.getCantidad())
+                .append(",\"capacidadNominal\":")
+                .append(estructura.getNumeroCubetas() * estructura.getCapacidadCubeta());
+
+        json.append(",\"cubetas\":[");
+        Bucket[] cubetas = estructura.getCubetas();
+        for (int i = 0; i < cubetas.length; i++) {
+            if (i > 0) {
+                json.append(',');
+            }
+            json.append("{\"indice\":").append(i)
+                    .append(",\"capacidad\":").append(cubetas[i].getCapacidad())
+                    .append(",\"cantidad\":").append(cubetas[i].getCantidad())
+                    .append(",\"datos\":")
+                    .append(SerializadorJson.arregloEnteros(cubetas[i].getDatos()))
+                    .append('}');
+        }
+        json.append("]");
+
+        json.append(",\"indicePrimario\":[");
+        Index[] primario = estructura.getIndicePrimario();
+        if (primario != null) {
+            for (int i = 0; i < primario.length; i++) {
+                if (primario[i] == null) {
+                    break;
+                }
+                if (i > 0) {
+                    json.append(',');
+                }
+                json.append("{\"clave\":").append(primario[i].getKey())
+                        .append(",\"cubeta\":").append(primario[i].getBucket())
+                        .append('}');
+            }
+        }
+        json.append("]");
+
+        json.append(",\"indiceSecundario\":[");
+        SecondaryIndex[] secundario = estructura.getIndiceSecundario();
+        if (secundario != null) {
+            for (int i = 0; i < secundario.length; i++) {
+                if (secundario[i] == null) {
+                    break;
+                }
+                if (i > 0) {
+                    json.append(',');
+                }
+                json.append("{\"clave\":").append(secundario[i].getKey())
+                        .append(",\"cubeta\":").append(secundario[i].getBucket())
+                        .append(",\"posicion\":").append(secundario[i].getPosition())
+                        .append('}');
+            }
+        }
+        json.append("]");
+
+        json.append(",\"indiceMultinivel\":[");
+        MultiLevelIndex[] multinivel = estructura.getIndiceMultiNivel();
+        if (multinivel != null) {
+            for (int i = 0; i < multinivel.length; i++) {
+                if (multinivel[i] == null) {
+                    break;
+                }
+                if (i > 0) {
+                    json.append(',');
+                }
+                json.append("{\"clave\":").append(multinivel[i].getKey())
+                        .append(",\"posicionIndicePrimario\":")
+                        .append(multinivel[i].getIndexPosition())
+                        .append('}');
+            }
+        }
+        json.append("]");
+
+        return json.append('}').toString();
+    }
+
+    /**
+     * Aplica o cambia la configuración del archivo indexado: cifras de la
+     * clave, número de cubetas y capacidad de cada cubeta. Crea una
+     * estructura nueva y vacía.
+     *
+     * @param intercambio contexto HTTP con digitos, cubetas y capacidad.
+     * @return JSON de resultado.
+     */
+    private String indicesConfigurarJson(HttpExchange intercambio) {
+        Map<String, String> parametros = leerParametros(intercambio);
+        try {
+            int digitos = enteroObligatorio(parametros, "digitos");
+            int cubetas = enteroObligatorio(parametros, "cubetas");
+            int capacidad = enteroObligatorio(parametros, "capacidad");
+            gestorIndices.configurar(digitos, cubetas, capacidad);
+            return okJson("Archivo indexado configurado: claves de " + digitos
+                    + " dígito(s), " + cubetas + " cubeta(s) de capacidad "
+                    + capacidad + ". Estructura nueva y vacía.");
+        } catch (ExcepcionEstructura e) {
+            return errorJson(e.getMessage());
+        } catch (IllegalArgumentException e) {
+            return errorJson(e.getMessage());
+        }
+    }
+
+    /**
+     * Inserta una clave en el archivo y devuelve además la cantidad de
+     * cubetas resultante (la estructura puede redimensionarse al expandir).
+     *
+     * @param intercambio contexto HTTP con el parámetro clave.
+     * @return JSON de resultado.
+     */
+    private String indicesInsertarJson(HttpExchange intercambio) {
+        Map<String, String> parametros = leerParametros(intercambio);
+        try {
+            int clave = enteroObligatorio(parametros, "clave");
+            gestorIndices.insertar(clave);
+            return "{\"ok\":true"
+                    + ",\"mensaje\":" + SerializadorJson.cadena(
+                            "Clave " + clave + " insertada en el archivo indexado.")
+                    + ",\"cubetas\":" + gestorIndices.getEstructura().getNumeroCubetas()
+                    + '}';
+        } catch (ExcepcionEstructura e) {
+            return errorJson(e.getMessage());
+        } catch (IllegalArgumentException e) {
+            return errorJson(e.getMessage());
+        }
+    }
+
+    /**
+     * Elimina una clave del archivo indexado.
+     *
+     * @param intercambio contexto HTTP con el parámetro clave.
+     * @return JSON de resultado.
+     */
+    private String indicesEliminarJson(HttpExchange intercambio) {
+        Map<String, String> parametros = leerParametros(intercambio);
+        try {
+            int clave = enteroObligatorio(parametros, "clave");
+            gestorIndices.getEstructura().eliminar(clave);
+            return okJson("Clave " + clave + " eliminada del archivo indexado.");
+        } catch (ExcepcionEstructura e) {
+            return errorJson(e.getMessage());
+        } catch (IllegalArgumentException e) {
+            return errorJson(e.getMessage());
+        }
+    }
+
+    /**
+     * Ejecuta la búsqueda por el índice indicado (tipo=primario/secundario/
+     * multinivel) y devuelve los pasos para animar la vista.
+     *
+     * @param intercambio contexto HTTP con clave y tipo.
+     * @return JSON con encontrada/indice/pasos/mensaje.
+     */
+    private String indicesBuscarJson(HttpExchange intercambio) {
+        Map<String, String> parametros = leerParametros(intercambio);
+        try {
+            int clave = enteroObligatorio(parametros, "clave");
+            String tipo = textoObligatorio(parametros, "tipo");
+            ResultadoBusqueda resultado;
+            switch (tipo) {
+                case "primario":
+                case "secundario":
+                case "multinivel":
+                    break;
+                default:
+                    return errorJson("Tipo de índice inválido: " + tipo
+                            + " (use primario, secundario o multinivel).");
+            }
+            if ("primario".equals(tipo)) {
+                resultado = gestorIndices.buscarPrimarioConPasos(clave);
+            } else if ("secundario".equals(tipo)) {
+                resultado = gestorIndices.buscarSecundarioConPasos(clave);
+            } else {
+                resultado = gestorIndices.buscarMultinivelConPasos(clave);
+            }
+
+            StringBuilder pasos = new StringBuilder("[");
+            List<PasoBusqueda> lista = resultado.getPasos();
+            for (int i = 0; i < lista.size(); i++) {
+                PasoBusqueda paso = lista.get(i);
+                if (i > 0) {
+                    pasos.append(',');
+                }
+                pasos.append("{\"numero\":").append(paso.getNumeroPaso())
+                        .append(",\"indice\":").append(paso.getIndiceExplorado())
+                        .append(",\"claveComparada\":").append(paso.getClaveComparada())
+                        .append(",\"descripcion\":")
+                        .append(SerializadorJson.cadena(paso.getDescripcion()))
+                        .append('}');
+            }
+            pasos.append(']');
+
+            return "{\"encontrada\":" + resultado.isEncontrada()
+                    + ",\"indice\":" + resultado.getIndiceEncontrado()
+                    + ",\"tipo\":" + SerializadorJson.cadena(tipo)
+                    + ",\"mensaje\":" + SerializadorJson.cadena(resultado.getMensaje())
+                    + ",\"pasos\":" + pasos + '}';
+        } catch (IllegalArgumentException e) {
+            return errorJson(e.getMessage());
+        }
+    }
+
+    /**
+     * Limpia la sección de índices: crea de nuevo la estructura por defecto.
+     *
+     * @return JSON de resultado.
+     */
+    private String indicesReiniciarJson() {
+        try {
+            gestorIndices = new GestorEstructurasDinamicas(6, 2);
+            return okJson("Sección de índices reiniciada: estructura nueva y "
+                    + "vacía. Aplique la configuración para operar.");
+        } catch (ExcepcionEstructura e) {
             return errorJson(e.getMessage());
         }
     }

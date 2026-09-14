@@ -1825,3 +1825,95 @@ button.mudo:hover {
 .cubeta.insertando .clave-ext:last-child {
     animation: estampar 0.7s cubic-bezier(0.18, 0.9, 0.32, 1.2);
 }
+
+/* ====================================================================
+   ÍNDICES (PRIMARIOS, SECUNDARIOS, MULTINIVEL)
+   ==================================================================== */
+
+.ind-tablas {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.ind-tabla-card {
+    background: #ffffff;
+    border: 1px solid var(--borde);
+    border-top: 3px solid var(--acento);
+    border-radius: var(--radio);
+    padding: 0.9rem 1rem;
+    box-shadow: var(--sombra);
+    min-width: 0;
+}
+
+.ind-tabla-card h3 {
+    margin-top: 0;
+    font-size: 0.98rem;
+    color: var(--texto);
+    display: flex;
+    align-items: baseline;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.ind-tabla-leyenda {
+    font-size: 0.78rem;
+    font-weight: 600;
+    color: var(--acento-oscuro);
+    background: #e6f6f5;
+    border-radius: 999px;
+    padding: 1px 9px;
+}
+
+.ind-tabla-ayuda {
+    margin: 0.4rem 0 0.7rem;
+    font-size: 0.82rem;
+    color: var(--texto-suave);
+    line-height: 1.4;
+}
+
+.ind-tabla-vacia {
+    color: var(--texto-suave);
+    font-size: 0.85rem;
+    font-style: italic;
+    margin: 0.4rem 0;
+}
+
+table.ind-tabla {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.88rem;
+}
+
+table.ind-tabla th,
+table.ind-tabla td {
+    border: 1px solid var(--borde);
+    padding: 5px 9px;
+    text-align: left;
+    white-space: nowrap;
+}
+
+table.ind-tabla th {
+    background: #eef7f7;
+    color: var(--texto);
+    font-weight: 700;
+}
+
+table.ind-tabla tbody tr:nth-child(even) {
+    background: #f7fbfb;
+}
+
+table.ind-tabla .ind-fila.comparando {
+    background: #e4f8f7;
+    outline: 2px solid var(--acento);
+}
+
+table.ind-tabla .ind-fila.hallado {
+    background: #e2f4e8;
+    outline: 2px solid var(--exito);
+}
+
+table.ind-tabla .ind-fila.comparando .ind-celda-clave {
+    font-weight: 700;
+}

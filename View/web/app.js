@@ -1031,24 +1031,27 @@ document.getElementById('btnVerExternas').addEventListener('click', () => {
     navegarA('vista-externas',
         ['Algoritmos de búsqueda', 'Búsquedas externas']);
 });
+/**
+ * Configuración de escuchas de eventos para la navegación de índices.
+ * Reemplaza los mensajes de "no implementado" por llamadas directas a las vistas correspondientes.
+ */
+
+// Evento para abrir la vista principal de índices generales
 document.getElementById('btnVerIndices').addEventListener('click', () => {
-    navegarA('vista-indices',
-        ['Algoritmos de búsqueda', 'Índices']);
+    navegarA('vista-indices', ['Algoritmos de búsqueda', 'Índices']);
 });
+
+// Eventos para abrir la hoja de índices centrada en cada tipo
 document.getElementById('btnVerIndicesPrimarios').addEventListener('click', () => {
-    abrirPlaceholder('Índices primarios',
-        'La sección de Índices primarios aún no está implementada. '
-        + 'Estará disponible en una próxima versión.');
+    indAbrirTipo('PRIMARIO');
 });
+
 document.getElementById('btnVerIndicesSecundarios').addEventListener('click', () => {
-    abrirPlaceholder('Índices secundarios',
-        'La sección de Índices secundarios aún no está implementada. '
-        + 'Estará disponible en una próxima versión.');
+    indAbrirTipo('SECUNDARIO');
 });
+
 document.getElementById('btnVerIndicesMultinivel').addEventListener('click', () => {
-    abrirPlaceholder('Índices multinivel',
-        'La sección de Índices multinivel aún no está implementada. '
-        + 'Estará disponible en una próxima versión.');
+    indAbrirTipo('MULTINIVEL');
 });
 document.getElementById('btnVerTransformacion').addEventListener('click', () => {
     abrirTransformacion();
@@ -1089,6 +1092,568 @@ recargarEstado().catch((error) => {
     aviso.textContent = 'No se pudo contactar el servidor: ' + error.message;
     aviso.classList.add('error');
 });
+
+// ====================================================================
+// ÍNDICES (PRIMARIOS, SECUNDARIOS, MULTINIVEL)
+// ====================================================================
+
+/** Estado de la última consulta /api/indices/estado. */
+let indEstado = { configurado: false, digitos: 4, estructura: {} };
+
+/** true mientras una animación o llamada de índices está en curso. */
+let indAnimando = false;
+
+/** Tipo activo de la hoja abierta ("PRIMARIO" | "SECUNDARIO" | "MULTINIVEL"). */
+let indTipoActivo = 'PRIMARIO';
+
+/** Recarga el estado de índices desde el servidor. */
+async function indRecargarEstado() {
+    indEstado = await llamarApi('/api/indices/estado');
+    indPintarAviso();
+    indDibujarCubetas();
+    indDibujarTablas();
+    return indEstado;
+}
+
+/**
+ * Abre la hoja de índices mostrando la sección del tipo indicado y recarga
+ * el estado vigente del archivo indexado.
+ */
+async function indAbrirTipo(tipo) {
+    indTipoActivo = tipo;
+    const migas = ['Algoritmos de búsqueda', 'Índices'];
+    if (tipo === 'PRIMARIO') {
+        migas.push('Primarios');
+    } else if (tipo === 'SECUNDARIO') {
+        migas.push('Secundarios');
+    } else {
+        migas.push('Multinivel');
+    }
+
+    document.getElementById('indTituloMetodo').textContent =
+        'Índices sobre archivo indexado';
+    // Texto final según el tipo abierto
+    let ayuda = 'El archivo guarda las claves en cubetas hash y sobre él se '
+        + 'levantan automáticamente los tres índices. Al cambiar de índices '
+        + 'se conservan las claves ya insertadas.';
+    if (tipo === 'PRIMARIO') {
+        ayuda += ' Está viendo el índice primario: la primera clave de cada '
+            + 'cubeta ocupada y la cubeta a la que apunta.';
+    } else if (tipo === 'SECUNDARIO') {
+        ayuda += ' Está viendo el índice secundario: una entrada por cada '
+            + 'clave con su cubeta y posición exacta.';
+    } else {
+        ayuda += ' Está viendo el índice multinivel: el nivel superior que '
+            + 'resume el índice primario para saltar entradas.';
+    }
+    document.getElementById('indAyudaMetodo').textContent = ayuda;
+
+    document.getElementById('indListaPasos').innerHTML = '';
+    document.getElementById('indEstadoAnimacion').textContent = '';
+
+    try {
+        await indRecargarEstado();
+    } catch (error) {
+        indMostrarMensaje('Error conectando con el servidor: ' + error.message, true);
+    }
+
+    if (indEstado.configurado) {
+        indDigitos().value = indEstado.digitos;
+        indCubetas().value = indEstado.estructura.numCubetas;
+        indCapacidad().value = indEstado.estructura.capacidadCubeta;
+        indRevelarOperaciones();
+    }
+
+    navegarA('vista-indicesmetodo', migas);
+
+    if (indEstado.configurado) {
+        setTimeout(indEnfocarTipo, 60);
+    }
+}
+
+/** Hace scroll y resalta la tabla del tipo activo de índices. */
+function indEnfocarTipo() {
+    const selector = indTipoActivo === 'PRIMARIO' ? 'indTablaPrimario'
+        : indTipoActivo === 'SECUNDARIO' ? 'indTablaSecundario'
+            : 'indTablaMultinivel';
+    const tabla = document.getElementById(selector);
+    if (tabla && tabla.closest('.ind-tabla-card')) {
+        tabla.closest('.ind-tabla-card').scrollIntoView({
+            behavior: 'smooth', block: 'center'
+        });
+    }
+}
+
+/** Revela el área de operaciones (ya hay un archivo configurado). */
+function indRevelarOperaciones() {
+    document.getElementById('indZonaOperaciones').hidden = false;
+}
+
+/** Muestra un mensaje en el aviso del área de operaciones de índices. */
+function indMostrarMensaje(texto, esError) {
+    const aviso = document.getElementById('indMensaje');
+    aviso.textContent = texto;
+    aviso.classList.remove('error', 'exito');
+    aviso.classList.add(esError ? 'error' : 'exito');
+}
+
+/** Pinta el aviso de rango según los dígitos configurados. */
+function indPintarAviso() {
+    const aviso = document.getElementById('indAvisoRango');
+    if (!indEstado.configurado) {
+        aviso.textContent = 'No hay archivo configurado aún.';
+        aviso.classList.add('error');
+        return;
+    }
+    aviso.textContent = 'Rango válido de claves: '
+        + indEstado.rangoMinimo + ' a ' + indEstado.rangoMaximo
+        + ' (claves de ' + indEstado.digitos + ' dígito(s)).';
+    aviso.classList.remove('error', 'exito');
+}
+
+/** Bloquea o desbloquea los botones de la hoja de índices. */
+function indBloquearBotones(bloquear) {
+    const ids = ['indBtnIniciar', 'indBtnInsertar', 'indBtnEliminar',
+        'indBtnBuscarPrimario', 'indBtnBuscarSecundario',
+        'indBtnBuscarMultinivel', 'indBtnReiniciar'];
+    ids.forEach((id) => {
+        const boton = document.getElementById(id);
+        if (boton) {
+            boton.disabled = bloquear;
+        }
+    });
+}
+
+/** Añade una entrada al panel de proceso de la hoja de índices. */
+function indAnadirLog(texto, esError) {
+    const lista = document.getElementById('indListaPasos');
+    const div = document.createElement('div');
+    div.className = 'paso' + (esError ? ' error' : '');
+    div.innerHTML = '<span class="detalle">' + escapeHtml(texto) + '</span>';
+    lista.appendChild(div);
+    lista.scrollTop = lista.scrollHeight;
+}
+
+/** Aplica la configuración del archivo indexado. */
+async function indAplicar() {
+    if (indAnimando) {
+        return;
+    }
+    const digitos = document.getElementById('indDigitos').value.trim();
+    const cubetas = document.getElementById('indCubetas').value.trim();
+    const capacidad = document.getElementById('indCapacidad').value.trim();
+    if (digitos === '' || cubetas === '' || capacidad === '') {
+        indMostrarMensaje('Indique las cifras, el número de cubetas y su capacidad.', true);
+        return;
+    }
+    indAnimando = true;
+    indBloquearBotones(true);
+    try {
+        const ruta = '/api/indices/configurar?digitos=' + encodeURIComponent(digitos)
+            + '&cubetas=' + encodeURIComponent(cubetas)
+            + '&capacidad=' + encodeURIComponent(capacidad);
+        const resultado = await llamarApi(ruta);
+        if (!resultado.ok) {
+            indMostrarMensaje(resultado.mensaje, true);
+            return;
+        }
+        indMostrarMensaje(resultado.mensaje, false);
+        indRevelarOperaciones();
+        document.getElementById('indListaPasos').innerHTML = '';
+        document.getElementById('indClave').value = '';
+        await indRecargarEstado();
+    } catch (error) {
+        indMostrarMensaje('Error conectando con el servidor: ' + error.message, true);
+    } finally {
+        indAnimando = false;
+        indBloquearBotones(false);
+    }
+}
+
+/** Limpia la sección de índices y restaura la configuración por defecto. */
+async function indReiniciar() {
+    if (indAnimando) {
+        return;
+    }
+    indAnimando = true;
+    indBloquearBotones(true);
+    try {
+        await llamarApi('/api/indices/reiniciar');
+        indDigitos().value = 4;
+        indCubetas().value = 6;
+        indCapacidad().value = 2;
+        document.getElementById('indZonaOperaciones').hidden = true;
+        document.getElementById('indListaPasos').innerHTML = '';
+        document.getElementById('indVisualCubetas').innerHTML = '';
+        document.getElementById('indEstadoEstructura').textContent = '';
+        document.getElementById('indEstadoAnimacion').textContent = '';
+        document.getElementById('indMensaje').textContent = '';
+        document.getElementById('indMensaje').classList.remove('error', 'exito');
+        await indRecargarEstado();
+        indMostrarMensaje('Sección de índices reiniciada.', false);
+    } catch (error) {
+        indMostrarMensaje('Error limpiando: ' + error.message, true);
+    } finally {
+        indAnimando = false;
+        indBloquearBotones(false);
+    }
+}
+
+/** Accesores cortos de los campos de configuración. */
+function indDigitos() { return document.getElementById('indDigitos'); }
+function indCubetas() { return document.getElementById('indCubetas'); }
+function indCapacidad() { return document.getElementById('indCapacidad'); }
+
+/** Ubica la cubeta que contiene una clave dentro del visual. */
+function indUbicarCubeta(clave) {
+    const objetivo = String(clave);
+    const cubetas = document.querySelectorAll('#indVisualCubetas .cubeta');
+    for (const cubeta of cubetas) {
+        const chips = cubeta.querySelectorAll('.clave-ext, .clave-enlazada');
+        for (const chip of chips) {
+            if (chip.textContent.trim() === objetivo) {
+                return cubeta;
+            }
+        }
+    }
+    return null;
+}
+
+/** Reproduce animada una búsqueda por índice resaltando cubetas y tablas. */
+async function indAnimarBusqueda(pasos, encontrada, tipo, mensaje) {
+    const pasosLog = document.getElementById('indListaPasos');
+    pasosLog.innerHTML = '';
+
+    indLimpiarResaltes();
+
+    let previoCubeta = null;
+    let previoFila = null;
+    for (const paso of pasos) {
+        if (previoCubeta) {
+            previoCubeta.classList.remove('comparando');
+            previoCubeta.classList.add('barrido');
+        }
+        if (previoFila) {
+            previoFila.classList.remove('comparando');
+        }
+        document.getElementById('indEstadoAnimacion').textContent =
+            'Paso ' + paso.numero + ': ' + paso.descripcion;
+
+        const cubeta = paso.indice >= 0 ? document.querySelector(
+            '#indVisualCubetas .cubeta[data-indice="' + paso.indice + '"]') : null;
+        if (cubeta) {
+            cubeta.classList.add('comparando');
+            cubeta.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            previoCubeta = cubeta;
+        } else {
+            previoCubeta = null;
+        }
+
+        const fila = indFilaDePaso(tipo, paso);
+        if (fila) {
+            fila.classList.add('comparando');
+            fila.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            previoFila = fila;
+        } else {
+            previoFila = null;
+        }
+
+        const div = document.createElement('div');
+        div.className = 'paso';
+        div.innerHTML = '<span class="numero">Paso ' + paso.numero
+            + '</span><span class="detalle">' + escapeHtml(paso.descripcion)
+            + '</span>';
+        pasosLog.appendChild(div);
+        pasosLog.scrollTop = pasosLog.scrollHeight;
+        await new Promise((resolver) => setTimeout(resolver, 520));
+    }
+    document.getElementById('indEstadoAnimacion').textContent = '';
+
+    const hallada = indUbicarCubeta(document.getElementById('indClave').value.trim());
+    if (hallada) {
+        hallada.classList.remove('comparando', 'barrido');
+        hallada.classList.add('hallado');
+    }
+
+    if (tipo === 'PRIMARIO' && indEstado.estructura.indicePrimario) {
+        indEncontrarFilaHallada('indTablaPrimario', tipo);
+    } else if (tipo === 'SECUNDARIO'
+            && indEstado.estructura.indiceSecundario) {
+        indEncontrarFilaHallada('indTablaSecundario', tipo);
+    } else if (tipo === 'MULTINIVEL'
+            && indEstado.estructura.indiceMultinivel) {
+        indEncontrarFilaHallada('indTablaMultinivel', tipo);
+    }
+
+    if (!encontrada) {
+        indAnadirLog(mensaje, true);
+        setTimeout(() => {
+            if (hallada) {
+                hallada.classList.remove('hallado');
+            }
+        }, 1500);
+    }
+    indAnadirLog((tipo === 'PRIMARIO' ? 'Resultado índice primario: '
+        : tipo === 'SECUNDARIO' ? 'Resultado índice secundario: '
+            : 'Resultado índice multinivel: ') + mensaje, !encontrada);
+}
+
+/** Devuelve la fila de la tabla del tipo activo que corresponde al paso. */
+function indFilaDePaso(tipo, paso) {
+    const clave = String(paso.claveComparada);
+    let tabla;
+    if (tipo === 'PRIMARIO') {
+        tabla = document.getElementById('indTablaPrimario');
+    } else if (tipo === 'SECUNDARIO') {
+        tabla = document.getElementById('indTablaSecundario');
+    } else {
+        tabla = document.getElementById('indTablaMultinivel');
+    }
+    if (!tabla) {
+        return null;
+    }
+    const filas = tabla.querySelectorAll('.ind-fila');
+    for (const fila of filas) {
+        const celda = fila.querySelector('.ind-celda-clave');
+        if (celda && celda.textContent.trim() === clave) {
+            return fila;
+        }
+    }
+    return null;
+}
+
+/** Marca como hallada la fila de la tabla que contiene la clave buscada. */
+function indEncontrarFilaHallada(tablaId, tipo) {
+    const clave = document.getElementById('indClave').value.trim();
+    const tabla = document.getElementById(tablaId);
+    if (!tabla) {
+        return;
+    }
+    const filas = tabla.querySelectorAll('.ind-fila');
+    for (const fila of filas) {
+        const celda = fila.querySelector('.ind-celda-clave');
+        if (celda && celda.textContent.trim() === clave) {
+            fila.classList.remove('comparando');
+            fila.classList.add('hallado');
+        }
+    }
+}
+
+/** Quita todos los resaltes de cubetas, tablas y pasos previos. */
+function indLimpiarResaltes() {
+    document.querySelectorAll('#indVisualCubetas .cubeta').forEach((c) => {
+        c.classList.remove('comparando', 'barrido', 'hallado', 'insertando');
+    });
+    document.querySelectorAll('.ind-tabla .ind-fila').forEach((f) => {
+        f.classList.remove('comparando', 'hallado');
+    });
+}
+
+/** Resalta la cubeta destino al insertar o eliminar una clave. */
+async function indResaltarCubeta(clave) {
+    const cubeta = indUbicarCubeta(clave);
+    if (!cubeta) {
+        return;
+    }
+    cubeta.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    cubeta.classList.add('insertando');
+    await new Promise((resolver) => setTimeout(resolver, 800));
+    cubeta.classList.remove('insertando');
+}
+
+/** Ejecuta una operación sobre el archivo indexado. */
+async function indOperar(operacion, tipo) {
+    if (indAnimando) {
+        return;
+    }
+    const valor = document.getElementById('indClave').value.trim();
+    if (valor === '') {
+        indMostrarMensaje('Escriba una clave.', true);
+        return;
+    }
+    if (parseInt(valor, 10) < parseInt(indEstado.rangoMinimo, 10)
+            || parseInt(valor, 10) > parseInt(indEstado.rangoMaximo, 10)) {
+        indMostrarMensaje('La clave ' + valor + ' está fuera del rango válido '
+            + indEstado.rangoMinimo + '..' + indEstado.rangoMaximo + '.', true);
+        return;
+    }
+
+    indAnimando = true;
+    indBloquearBotones(true);
+    try {
+        let ruta;
+        if (operacion === 'buscar') {
+            ruta = '/api/indices/buscar?clave=' + encodeURIComponent(valor)
+                + '&tipo=' + encodeURIComponent(tipo.toLowerCase());
+        } else {
+            ruta = '/api/indices/' + operacion + '?clave=' + encodeURIComponent(valor);
+        }
+        const resultado = await llamarApi(ruta);
+
+        if (operacion === 'buscar') {
+            if (!resultado.ok) {
+                indAnadirLog(resultado.mensaje, true);
+                indMostrarMensaje(resultado.mensaje, true);
+                return;
+            }
+            await indAnimarBusqueda(resultado.pasos || [],
+                resultado.encontrada, tipo, resultado.mensaje);
+            indMostrarMensaje(resultado.mensaje, !resultado.encontrada);
+        } else {
+            if (!resultado.ok) {
+                indMostrarMensaje(resultado.mensaje, true);
+                indAnadirLog(resultado.mensaje, true);
+                return;
+            }
+            await indRecargarEstado();
+            indAnadirLog(resultado.mensaje, false);
+            indMostrarMensaje(resultado.mensaje, false);
+            if (operacion === 'insertar') {
+                await indResaltarCubeta(valor);
+            }
+        }
+    } catch (error) {
+        indMostrarMensaje('Error conectando con el servidor: ' + error.message, true);
+    } finally {
+        indAnimando = false;
+        indBloquearBotones(false);
+    }
+}
+
+/** Dibuja el archivo de cubetas en la hoja de índices. */
+function indDibujarCubetas() {
+    const estadoVisual = document.getElementById('indEstadoEstructura');
+    const visual = document.getElementById('indVisualCubetas');
+
+    const est = indEstado.estructura || {};
+    if (!indEstado.configurado) {
+        estadoVisual.textContent =
+            'Aún no hay archivo indexado. Aplique la configuración para operar.';
+        estadoVisual.classList.remove('error', 'exito');
+        visual.innerHTML = '';
+        return;
+    }
+
+    estadoVisual.textContent = 'Archivo: ' + est.numCubetas
+        + ' cubeta(s), capacidad base ' + est.capacidadCubeta
+        + ' | Hash: clave mod ' + est.numCubetas
+        + ' | Claves insertadas: ' + est.cantidad + '.';
+    estadoVisual.classList.remove('error', 'exito');
+
+    visual.innerHTML = '';
+    const cubetas = est.cubetas || [];
+    const grilla = document.createElement('div');
+    grilla.className = 'fila-celdas completa';
+    cubetas.forEach((cubeta) => grilla.appendChild(indCrearCubeta(cubeta)));
+    visual.appendChild(grilla);
+}
+
+/** Crea el elemento visual de una cubeta del archivo indexado. */
+function indCrearCubeta(cubeta) {
+    const celda = document.createElement('div');
+    celda.className = 'cubeta ' + (cubeta.cantidad > 0 ? 'ocupada' : 'vacia');
+    celda.dataset.indice = cubeta.indice;
+
+    const etiqueta = document.createElement('span');
+    etiqueta.className = 'indice';
+    etiqueta.textContent = 'Cubeta ' + cubeta.indice
+        + ' (' + cubeta.cantidad + '/' + cubeta.capacidad + ')';
+    celda.appendChild(etiqueta);
+
+    const datos = cubeta.datos || [];
+    if (datos.length === 0) {
+        const vacia = document.createElement('span');
+        vacia.className = 'valor';
+        vacia.textContent = '—';
+        celda.appendChild(vacia);
+    } else {
+        datos.forEach((clave, idx) => {
+            const chip = document.createElement('span');
+            chip.className = idx === 0 ? 'clave-ext' : 'clave-enlazada';
+            chip.textContent = clave;
+            celda.appendChild(chip);
+        });
+    }
+    return celda;
+}
+
+/** Dibuja las tres tablas de índices (primario, secundario, multinivel). */
+function indDibujarTablas() {
+    const est = indEstado.estructura || {};
+    const vacio =
+        '<p class="ind-tabla-vacia">Sin entradas: inserte al menos una clave.</p>';
+
+    // Índice primario
+    const primario = est.indicePrimario || [];
+    indRellenarTabla('indTablaPrimario', ['Clave del índice', 'Cubeta destino'],
+        primario.map((e) => [e.clave, 'Cubeta ' + e.cubeta]),
+        'indTablaPrimario', vacio);
+
+    // Índice secundario
+    const secundario = est.indiceSecundario || [];
+    indRellenarTabla('indTablaSecundario', ['Clave', 'Cubeta', 'Posición'],
+        secundario.map((e) => [e.clave, 'Cubeta ' + e.cubeta, 'Pos ' + e.posicion]),
+        'indTablaSecundario', vacio);
+
+    // Índice multinivel
+    const multinivel = est.indiceMultinivel || [];
+    indRellenarTabla('indTablaMultinivel',
+        ['Clave del nivel superior', 'Entrada del índice primario'],
+        multinivel.map((e) => [e.clave, 'Entrada ' + (e.posicionIndicePrimario + 1)]),
+        'indTablaMultinivel', vacio);
+}
+
+/** Construye el HTML de una tabla de índices con sus filas. */
+function indRellenarTabla(idContenedor, cabeceras, filas, idCorrelacion, vacio) {
+    const contenedor = document.getElementById(idContenedor);
+    if (!contenedor) {
+        return;
+    }
+    if (filas.length === 0) {
+        contenedor.innerHTML = vacio;
+        return;
+    }
+    const tabla = document.createElement('table');
+    tabla.className = 'ind-tabla';
+
+    const thead = document.createElement('thead');
+    const trCab = document.createElement('tr');
+    cabeceras.forEach((cab) => {
+        const th = document.createElement('th');
+        th.textContent = cab;
+        trCab.appendChild(th);
+    });
+    thead.appendChild(trCab);
+    tabla.appendChild(thead);
+
+    const tbody = document.createElement('tbody');
+    filas.forEach((fila) => {
+        const tr = document.createElement('tr');
+        tr.className = 'ind-fila';
+        const tdClave = document.createElement('td');
+        tdClave.className = 'ind-celda-clave';
+        tdClave.textContent = fila[0];
+        tr.appendChild(tdClave);
+        for (let i = 1; i < fila.length; i++) {
+            const td = document.createElement('td');
+            td.textContent = fila[i];
+            tr.appendChild(td);
+        }
+        tbody.appendChild(tr);
+    });
+    tabla.appendChild(tbody);
+    contenedor.innerHTML = '';
+    contenedor.appendChild(tabla);
+}
+
+// --- Eventos de la sección de índices ---
+document.getElementById('indBtnIniciar').addEventListener('click', indAplicar);
+document.getElementById('indBtnInsertar').addEventListener('click', () => indOperar('insertar'));
+document.getElementById('indBtnEliminar').addEventListener('click', () => indOperar('eliminar'));
+document.getElementById('indBtnReiniciar').addEventListener('click', indReiniciar);
+document.getElementById('indBtnBuscarPrimario').addEventListener('click', () => indOperar('buscar', 'PRIMARIO'));
+document.getElementById('indBtnBuscarSecundario').addEventListener('click', () => indOperar('buscar', 'SECUNDARIO'));
+document.getElementById('indBtnBuscarMultinivel').addEventListener('click', () => indOperar('buscar', 'MULTINIVEL'));
 
 // ====================================================================
 // BÚSQUEDAS EXTERNAS (CUBETAS DINÁMICAS)
@@ -3721,3 +4286,4 @@ huffMarco.addEventListener('wheel', (evento) => {
 huffMarco.addEventListener('dblclick', () => {
     huffZoomEncajar();
 });
+

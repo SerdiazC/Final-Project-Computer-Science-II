@@ -15,3 +15,8 @@ logs/
 # Salida de compilación de Java
 out/
 *.class
+
+# Entorno de desarrollo local (no se sube)
+.vscode/
+build.bat
+_fuentes.txt
